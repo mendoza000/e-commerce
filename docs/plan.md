@@ -1,0 +1,231 @@
+# Plan de Desarrollo — Ecommerce Template
+
+> Referencia: ver `PRD.md` para el detalle funcional de cada feature.
+> Este plan asume que el propósito es doble: aprender arquitectura sólida y
+> terminar con un template realmente replicable. Por eso cada fase cierra con
+> algo funcional y probado antes de pasar a la siguiente — nada de dejar cabos
+> sueltos "para después" salvo que se indique explícitamente.
+
+---
+
+## Fase 0 — Setup del monorepo y entorno base
+
+**Objetivo:** tener el esqueleto del proyecto corriendo localmente con Docker,
+sin lógica de negocio todavía.
+
+- [ ] Crear estructura de carpetas del monorepo (`/apps/backend`, `/apps/frontend`, `/docker`, `/docs`)
+- [ ] Inicializar repo Git, `.gitignore` general (Laravel + Node + Docker)
+- [ ] Instalar Laravel limpio en `/apps/backend` (API-only, sin Breeze/Jetstream)
+- [ ] Instalar Next.js (App Router + TypeScript + Tailwind) en `/apps/frontend` usando Bun (`bun create next-app` o instalación manual + `bun install`)
+- [ ] Base de datos: **PostgreSQL** (decisión tomada, documentar en `docs/decisions.md`)
+- [ ] Admin: **embebido en el mismo Next.js** bajo rutas `/admin/*` (decisión tomada, documentar en `docs/decisions.md`)
+- [ ] Gestor de paquetes frontend: **Bun** (decisión tomada, documentar en `docs/decisions.md` — usar imagen base `oven/bun` en el Dockerfile del frontend en vez de `node`)
+- [ ] Crear `docker-compose.yml` con servicios: `backend`, `frontend`, `db`, `redis` (para colas/cache)
+- [ ] Crear `Dockerfile` para backend (PHP-FPM + Nginx o usar `php artisan serve` en dev)
+- [ ] Crear `Dockerfile` para frontend usando imagen base `oven/bun` (multi-stage build: `bun install` → `bun run build` → runtime standalone de Next.js)
+- [ ] Configurar `.env.example` en backend y frontend con todas las variables previstas (aunque no se usen todas aún)
+- [ ] Verificar que `docker-compose up` levanta los 3-4 servicios sin errores
+- [ ] Verificar conectividad backend → base de datos (migración de prueba)
+- [ ] Verificar que frontend puede hacer un fetch de prueba al backend (endpoint `/api/health`)
+- [ ] Documentar en `README.md` cómo levantar el entorno local desde cero
+
+**Entregable de fase:** `docker-compose up` levanta todo, endpoint de salud responde, sin features de negocio aún.
+
+---
+
+## Fase 1 — Modelo de datos y arquitectura base del backend
+
+**Objetivo:** dejar el dominio de datos sólido antes de construir endpoints o UI.
+
+- [ ] Diseñar esquema de base de datos: `products`, `categories`, `product_options`, `product_option_values`, `product_variants`, `variant_option_values` (pivot), `product_images` (con `option_value_id` nullable), `customers`, `orders`, `order_items`, `order_status_history`, `store_settings`, `payment_methods`, `fulfillment_methods`
+- [ ] Modelar el sistema de variantes como genérico (opciones + valores + combinaciones), no con columnas fijas tipo `color`/`talla` — ver `PRD.md` sección 5bis
+- [ ] Definir regla de "variante implícita" para productos sin opciones (todo producto tiene al menos una variante, aunque no tenga opciones configuradas)
+- [ ] Diseñar tablas de **multimoneda**: `currencies` (código, nombre, símbolo), `exchange_rates` (moneda_origen, moneda_destino, valor, fuente, vigente_desde) con historial, `exchange_rate_settings` (por par: modo `manual`/`automático`, provider usado, frecuencia de actualización, monto de referencia para APIs tipo CriptoYa) — ver `PRD.md` secciones 5ter y 8bis
+- [ ] Agregar a `orders` los campos de congelamiento de tasa: `base_currency`, `base_amount`, `payment_currency`, `exchange_rate_applied`, `payment_amount`
+- [ ] Diseñar catálogos de ubicación: `states` (Estados), `municipalities` (Municipios, FK a Estado), `parishes` (Parroquias, FK a Municipio) — ver `PRD.md` sección 9
+- [ ] Agregar a `customers`/`orders` los campos de dirección (state_id, municipality_id, parish_id, address_reference) y de identificación (document_type, document_number, phone con formato +58)
+- [ ] Agregar campo de reserva temporal de inventario a `product_variants` u `order_items` (`reserved_until` o tabla `inventory_reservations`)
+- [ ] Crear migraciones para todas las tablas anteriores
+- [ ] Crear modelos Eloquent con relaciones (`Product hasMany Variants`, `Order hasMany Items`, `Order belongsTo Municipality`, etc.)
+- [ ] Crear seeders de datos de ejemplo: productos ficticios, categorías, una tienda demo, catálogo base de Estados/Municipios/Parroquias de Venezuela, monedas base (VES, USD, USDT, COP)
+- [ ] Definir estructura de carpetas del backend orientada a capas: `app/Domain`, `app/Http/Controllers/Api`, `app/Services`, `app/Providers` (para payment/fulfillment providers más adelante)
+- [ ] Configurar Laravel Sanctum para autenticación de API (customer + admin)
+- [ ] Crear sistema de roles: `owner` (admin dueño, acceso total) y `staff` (acceso limitado a órdenes, sin acceso a configuración sensible) — ver `PRD.md` sección 4
+- [ ] Escribir tests unitarios básicos de los modelos principales (factories + relaciones)
+- [ ] Documentar el esquema de datos en `docs/schema.md` (diagrama o tabla descriptiva)
+
+**Entregable de fase:** base de datos completa, poblada con datos de prueba, sin endpoints públicos todavía.
+
+---
+
+## Fase 2 — API de catálogo (backend) + consumo en frontend
+
+**Objetivo:** primer flujo end-to-end visible: productos del backend renderizados en el frontend.
+
+- [ ] Endpoint `GET /api/products` (listado con paginación y filtros básicos: categoría, búsqueda)
+- [ ] Endpoint `GET /api/products/{slug}` (detalle de producto con opciones, valores, variantes e imágenes asociadas por valor de opción)
+- [ ] Endpoint `GET /api/categories`
+- [ ] Endpoint `GET /api/currencies` (monedas habilitadas por la tienda + tasa de cambio vigente)
+- [ ] Formato de respuesta consistente (API Resources de Laravel, no exponer modelos crudos)
+- [ ] Manejo de errores estandarizado (formato JSON consistente para 404/422/500)
+- [ ] Configurar CORS para permitir requests del frontend
+- [ ] Crear capa de servicios en Next.js para consumir la API (`/lib/api/products.ts`)
+- [ ] Página de listado de productos (storefront)
+- [ ] Página de detalle de producto
+- [ ] Selector de variantes en la página de detalle (por opción: ej. botones de color, dropdown de talla) que actualice precio, stock disponible e imágenes mostradas según la combinación seleccionada
+- [ ] Selector de moneda de visualización (si la tienda tiene más de una habilitada) que recalcule los precios mostrados con la tasa vigente
+- [ ] Componente de tarjeta de producto reutilizable
+- [ ] Manejo de estados de carga/error en el frontend
+- [ ] Definir sistema de theming inicial (variables CSS/Tailwind config) para personalización por cliente
+
+**Entregable de fase:** storefront público navegable mostrando productos reales desde el backend, con precios en la moneda elegida.
+
+---
+
+## Fase 3 — Carrito y checkout (sin pago real todavía)
+
+**Objetivo:** flujo de compra completo hasta creación de orden, con pago pendiente.
+
+- [ ] Implementar estado de carrito en frontend (Zustand o Context) persistido en localStorage
+- [ ] UI de carrito (agregar, quitar, actualizar cantidad, ver totales)
+- [ ] Endpoint `POST /api/orders` (crear orden en estado `pending_payment`) con validación de stock
+- [ ] Reserva temporal de inventario al crear la orden (ventana configurable, ej. 30-60 min — ver `PRD.md` sección 12) y job programado que libera la reserva si expira sin pago
+- [ ] Congelar tasa de cambio y moneda base/pago al crear la orden (no recalcular después)
+- [ ] Endpoints `GET /api/locations/states`, `GET /api/locations/municipalities?state_id=`, `GET /api/locations/parishes?municipality_id=` para los selects dependientes de dirección
+- [ ] Formulario de checkout: datos de envío (Estado/Municipio/Parroquia + referencia libre), datos de cliente (nombre, teléfono +58, tipo/número de documento), o checkout como invitado
+- [ ] Página de "orden creada" con resumen y siguiente paso (ir a pagar)
+- [ ] Endpoint `GET /api/orders/{id}` para que el cliente consulte su orden
+- [ ] Manejo de expiración de órdenes no pagadas (job programado que cancela y libera stock — mismo mecanismo que la reserva de inventario)
+
+**Entregable de fase:** un usuario puede armar carrito, hacer checkout con dirección real venezolana, y queda una orden creada en base de datos con estado pendiente de pago y tasa congelada.
+
+---
+
+## Fase 4 — Sistema de pago manual (payment providers)
+
+**Objetivo:** implementar la pieza más específica del contexto venezolano.
+
+- [ ] Definir interfaz `PaymentProviderInterface` (incluye `getCurrency()`) en el backend
+- [ ] Implementar `PagoMovilProvider` (Bs), `ZelleProvider` (USD), `TransferenciaNacionalProvider` (Bs), `EfectivoContraEntregaProvider` (moneda configurable)
+- [ ] Definir interfaz `ExchangeRateProviderInterface` (`getRate`, `getSourceName`) — ver `PRD.md` sección 8bis
+- [ ] Implementar `ManualRateProvider` y `CriptoYaRateProvider` (consulta `https://criptoya.com/api/binancep2p/{par}/{monto}` con monto configurable)
+- [ ] Job programado (Laravel Scheduler) que ejecuta los providers automáticos según la frecuencia configurada por par y guarda el resultado en `exchange_rates`
+- [ ] Manejo de fallo del provider automático: no romper el checkout, mantener la última tasa válida, registrar el incidente (log) para revisión del admin
+- [ ] Tabla/config de `payment_methods` editable desde admin (habilitar/deshabilitar, datos de cuenta, moneda asociada)
+- [ ] Endpoint `GET /api/payment-methods` (métodos activos con sus instrucciones y moneda, para mostrar en checkout)
+- [ ] Endpoint `POST /api/orders/{id}/payment-proof` (subida de comprobante — imagen/PDF)
+- [ ] Configurar almacenamiento de archivos (local en dev, definir estrategia para prod) con compresión de imágenes al subir
+- [ ] Validaciones de archivo (tipo, tamaño máximo)
+- [ ] UI de checkout: selección de método de pago + instrucciones dinámicas según el método (mostrando el monto ya convertido a la moneda de ese método)
+- [ ] UI de subida de comprobante post-checkout
+- [ ] Estado de orden se actualiza a `payment_submitted` al subir comprobante
+- [ ] Notificación al admin cuando llega un nuevo comprobante (email y/o link de WhatsApp, vía cola)
+
+**Entregable de fase:** cliente puede elegir método de pago, ver instrucciones en la moneda correcta, subir comprobante, y la orden refleja ese estado.
+
+---
+
+## Fase 5 — Panel de administración
+
+**Objetivo:** el admin puede operar la tienda sin tocar la base de datos directamente.
+
+- [ ] Rutas `/admin/*` embebidas en el mismo Next.js (decisión ya tomada en Fase 0)
+- [ ] Login de admin (usando Sanctum)
+- [ ] Middleware de protección de rutas admin (frontend y backend), incluyendo distinción de permisos `owner` vs `staff`
+- [ ] Gestión de usuarios staff: crear/desactivar cuentas de operador con acceso limitado a órdenes
+- [ ] CRUD de productos y categorías desde el panel (crear, editar, eliminar, gestión de imágenes)
+- [ ] CRUD de opciones de producto (crear/editar/eliminar opciones como "Color", "Talla" y sus valores posibles)
+- [ ] Generador de variantes: a partir de las combinaciones de valores de opción, crear las variantes correspondientes (con opción de generar todas las combinaciones o seleccionar solo algunas)
+- [ ] Edición individual de variante: SKU, precio (override opcional), stock
+- [ ] Subida de imágenes asociadas a un valor de opción específico (ej. fotos del color "Rojo") o al producto general si no aplica opción visual
+- [ ] Listado de órdenes con filtros por estado
+- [ ] Vista de detalle de orden: ver comprobante adjunto, historial de estados, tasa de cambio aplicada
+- [ ] Acción: confirmar pago (`payment_submitted` → `paid`) / rechazar pago (con motivo, vuelve a `pending_payment`)
+- [ ] Acción: marcar en preparación / marcar enviado (con courier/nota opcional) / marcar entregado / cancelar
+- [ ] Registro de `order_status_history` en cada transición (quién, cuándo, motivo)
+- [ ] Pantalla de configuración de tienda: datos generales, logo, colores, moneda base, monedas habilitadas
+- [ ] Pantalla de gestión de tasas de cambio: registrar nueva tasa manual, ver historial, y configurar por par si la fuente es manual o automática (CriptoYa), incluyendo frecuencia de actualización y monto de referencia
+- [ ] Pantalla de configuración de métodos de pago (activar/desactivar, editar datos, moneda asociada) — restringida a rol `owner`
+- [ ] Pantalla de configuración de métodos de envío/zonas
+- [ ] Pantalla de configuración de número de WhatsApp de contacto de la tienda
+
+**Entregable de fase:** flujo completo operable — un admin puede gestionar catálogo y procesar órdenes de principio a fin sin acceso directo a la BD, con separación de permisos owner/staff.
+
+---
+
+## Fase 6 — Fulfillment (envío) y cierre del ciclo de orden
+
+**Objetivo:** completar el ciclo de vida de la orden con la lógica de envío.
+
+- [ ] Definir interfaz `FulfillmentProviderInterface`
+- [ ] Implementar `DeliveryPropioProvider`, `RetiroEnTiendaProvider`, `CourierManualProvider`
+- [ ] Tabla/config de métodos de envío editable desde admin, con tarifas asociadas a zonas (Estado/Municipio)
+- [ ] Selección de método de envío en checkout (si aplica más de una opción)
+- [ ] Cálculo de costo de envío básico (tarifa plana por zona o "a coordinar")
+- [ ] Campo de tracking/courier/nota libre al marcar orden como enviada
+- [ ] Notificaciones al cliente en cambios de estado clave (pago confirmado, enviado, entregado) vía email y link de WhatsApp (`wa.me` prellenado)
+- [ ] Página de "mis pedidos" en el storefront (cliente autenticado) con historial y estado actual
+
+**Entregable de fase:** ciclo de vida completo de la orden, de creación a entrega, con visibilidad para cliente y admin.
+
+---
+
+## Fase 7 — Dockerización final y despliegue en Dokploy
+
+**Objetivo:** dejar el template listo para clonar y desplegar en producción con mínima fricción.
+
+- [ ] Optimizar Dockerfile de backend para producción (multi-stage, sin herramientas de dev, opcache configurado)
+- [ ] Optimizar Dockerfile de frontend para producción (Next.js standalone output, imagen `oven/bun`)
+- [ ] Revisar `docker-compose.yml` para producción (o crear `docker-compose.prod.yml` separado)
+- [ ] Configurar variables de entorno necesarias para Dokploy (dominios, `APP_URL`, `NEXT_PUBLIC_API_URL`, credenciales de BD, número de WhatsApp de la tienda)
+- [ ] Configurar healthchecks en los contenedores (para que Dokploy detecte servicios caídos)
+- [ ] Probar despliegue completo en Dokploy desde cero (clonar repo → configurar env → deploy)
+- [ ] Configurar HTTPS/dominio en Dokploy para el proyecto de prueba
+- [ ] Documentar en `docs/deploy.md` el proceso paso a paso de "nuevo cliente": clonar, configurar `.env`, ejecutar migraciones/seeders, desplegar
+- [ ] Script o comando Artisan de "bootstrap" para nueva instancia (crea admin inicial, configura moneda base, tasas iniciales y datos base de la tienda vía prompts o archivo de config)
+- [ ] Configurar backups automáticos de base de datos (cron + dump, o feature nativa de Dokploy si existe) con frecuencia mínima diaria
+
+**Entregable de fase:** el objetivo central del proyecto cumplido — clonar, configurar, y desplegar una tienda nueva en Dokploy en menos de una hora.
+
+---
+
+## Fase 8 — Pulido, testing y hardening (antes de ofrecerlo a un cliente real)
+
+**Objetivo:** pasar de "funciona en mis pruebas" a "listo para un cliente real".
+
+- [ ] Tests de integración de los flujos críticos (crear orden, subir comprobante, confirmar pago, cambiar estado de envío, expiración/liberación de reserva de inventario)
+- [ ] Revisión de seguridad: sanitización de uploads, rate limiting en endpoints públicos, validación exhaustiva de inputs
+- [ ] Revisión de permisos: separación real entre rol `owner` y `staff`, que un cliente no pueda ver/modificar órdenes de otro cliente
+- [ ] Optimización de queries (evitar N+1, revisar índices en tablas de alto volumen: `orders`, `products`, `exchange_rates`)
+- [ ] Responsive/mobile del storefront (crítico dado uso probable desde celular en Venezuela)
+- [ ] Revisión de performance de imágenes (compresión, lazy loading, formatos modernos)
+- [ ] Validar cálculos de conversión de moneda y redondeo en escenarios extremos (tasas muy altas, montos pequeños)
+- [ ] Documentación final de uso para un "cliente tipo" (manual básico del panel admin, incluyendo cómo actualizar la tasa de cambio)
+- [ ] Checklist de "nueva instancia" consolidado en `docs/onboarding-checklist.md`
+
+**Entregable de fase:** template listo para ofrecerse comercialmente, no solo como proyecto de aprendizaje.
+
+---
+
+## Backlog / Fases futuras (fuera del alcance inicial, no planificar aún)
+
+- Integración automática de Binance Pay (webhook de confirmación de pago)
+- Multi-tenancy real (si el volumen de clientes lo justifica)
+- Notificaciones vía API oficial de WhatsApp (más allá del link `wa.me`)
+- Reportes avanzados / dashboard de analíticas
+- Fuentes de tasa de cambio adicionales (BCV oficial, otros exchanges) más allá de manual y CriptoYa
+- Programa de descuentos/cupones
+- Facturación fiscal electrónica (SENIAT)
+- CI/CD automatizado (GitHub Actions → deploy a Dokploy)
+
+---
+
+## Notas de proceso
+
+- Cada fase debe cerrar con algo **demostrable**, no solo código escrito. Si una
+  fase no se puede probar de punta a punta, está mal cortada.
+- Evitar construir abstracciones (como el sistema de providers) antes de que el
+  PRD lo pida explícitamente — la Fase 4 y 6 son las que las requieren, no antes.
+- Ir documentando decisiones técnicas relevantes en `docs/decisions.md` (ej. por
+  qué PostgreSQL y no MySQL, por qué admin embebido y no app separada, etc.) —
+  esto es tan valioso para el aprendizaje como el código mismo.
