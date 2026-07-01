@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Domain\Enums\Role;
 use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -15,11 +16,27 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
-
         User::factory()->create([
             'name' => 'Test User',
             'email' => 'test@example.com',
+            'role' => Role::Owner,
+        ]);
+
+        User::factory()->create([
+            'name' => 'Staff Demo',
+            'email' => 'staff@example.com',
+            'role' => Role::Staff,
+        ]);
+
+        $this->call([
+            CurrencySeeder::class,
+            LocationSeeder::class,
+            ExchangeRateSettingSeeder::class,
+            ExchangeRateSeeder::class,
+            StoreSettingSeeder::class,
+            CategorySeeder::class,
+            ProductSeeder::class,
+            CustomerSeeder::class,
         ]);
     }
 }
