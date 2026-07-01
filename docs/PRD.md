@@ -66,6 +66,9 @@ ofrecer este ecommerce a distintos clientes con mínima fricción de setup).
 - Fuentes de tasa de cambio adicionales más allá de manual y CriptoYa (ej. BCV
   oficial, otros exchanges) — el patrón de `ExchangeRateProvider` ya deja esto
   preparado para agregarse sin refactor, pero no se implementa en esta fase.
+- Gestión de inventario multi-almacén/multi-sucursal — se asume un único punto
+  de inventario por tienda. El modelo de stock por variante no impide agregarlo
+  después, pero no se diseña para eso ahora.
 
 ## 4. Usuarios y roles
 
@@ -213,6 +216,61 @@ multimoneda sin asumir una única moneda "correcta".
    elegir moneda y método por separado si eso genera ambigüedad; el método de
    pago ya define la moneda.
 
+## 5quater. Gestión de inventario
+
+El inventario se controla a nivel de variante (ver sección 5bis) y debe
+soportar el ciclo completo de reserva → confirmación → liberación, con
+protección contra sobreventa y trazabilidad de movimientos.
+
+### Ciclo de vida del stock por orden
+
+1. **Al crear la orden** (`pending_payment`): el stock solicitado se
+   **reserva**, no se descuenta como venta definitiva todavía. La reserva
+   tiene una ventana de expiración configurable (ver sección 12, riesgo de
+   reserva de inventario).
+2. **Al confirmar el pago** (`paid`): la reserva se convierte en **descuento
+   definitivo** del stock disponible.
+3. **Si la orden se cancela, se rechaza, o la reserva expira sin pago**: el
+   stock reservado se **libera** y vuelve a estar disponible para otros
+   clientes.
+
+### Protección contra sobreventa (concurrencia)
+
+Reservar stock debe ser una operación atómica: la lectura del stock
+disponible y su reserva ocurren dentro de una misma transacción de base de
+datos con bloqueo de fila (`SELECT ... FOR UPDATE` o equivalente en Eloquent).
+Esto evita que dos clientes reserven simultáneamente la última unidad
+disponible de una variante.
+
+### Historial de movimientos (kardex)
+
+Todo cambio de stock queda registrado con su motivo, no solo el número
+resultante:
+
+- Venta confirmada (descuento).
+- Cancelación/expiración de orden (liberación).
+- Ajuste manual del admin (reposición, corrección de conteo físico, baja por
+  daño/pérdida).
+
+Esto permite auditar por qué el stock de una variante cambió en un momento
+dado, algo que un simple contador no responde.
+
+### Política de stock agotado
+
+Por defecto, **no se permite backorder/preventa**: si una variante tiene
+stock 0, no puede agregarse al carrito ni completarse una orden con ella. Esta
+es la decisión inicial más segura para una tienda pequeña; queda como mejora
+futura permitir configurar esta política por producto si el negocio lo
+requiere.
+
+### Comportamiento esperado en el storefront
+
+- Ocultar o deshabilitar en la UI las combinaciones de variante sin stock
+  (ej. si "Rojo, Talla 38" está agotado, esa opción se muestra deshabilitada
+  al seleccionar talla).
+- Mostrar aviso de "últimas unidades" cuando el stock de una variante está por
+  debajo de un umbral configurable (opcional, mejora de UX).
+
 ## 6. Funcionalidades — Panel Admin
 
 - Login de administrador (roles: dueño / staff).
@@ -222,6 +280,9 @@ multimoneda sin asumir una única moneda "correcta".
 - Gestión de opciones y variantes por producto: crear opciones (ej. "Color",
   "Talla"), agregar valores a cada opción, generar variantes a partir de las
   combinaciones, y editar SKU/precio/stock por variante individualmente.
+- Ajuste manual de stock por variante (reposición, corrección de conteo
+  físico, baja por daño/pérdida), registrado en el historial de movimientos
+  de inventario con su motivo.
 - Asociación de imágenes a valores de opción (ej. subir fotos para "Rojo" y
   que apliquen a todas las variantes de ese color) o al producto general si no
   aplica una opción visual.

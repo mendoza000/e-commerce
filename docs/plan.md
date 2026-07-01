@@ -37,22 +37,23 @@ sin lógica de negocio todavía.
 
 **Objetivo:** dejar el dominio de datos sólido antes de construir endpoints o UI.
 
-- [ ] Diseñar esquema de base de datos: `products`, `categories`, `product_options`, `product_option_values`, `product_variants`, `variant_option_values` (pivot), `product_images` (con `option_value_id` nullable), `customers`, `orders`, `order_items`, `order_status_history`, `store_settings`, `payment_methods`, `fulfillment_methods`
-- [ ] Modelar el sistema de variantes como genérico (opciones + valores + combinaciones), no con columnas fijas tipo `color`/`talla` — ver `PRD.md` sección 5bis
-- [ ] Definir regla de "variante implícita" para productos sin opciones (todo producto tiene al menos una variante, aunque no tenga opciones configuradas)
-- [ ] Diseñar tablas de **multimoneda**: `currencies` (código, nombre, símbolo), `exchange_rates` (moneda_origen, moneda_destino, valor, fuente, vigente_desde) con historial, `exchange_rate_settings` (por par: modo `manual`/`automático`, provider usado, frecuencia de actualización, monto de referencia para APIs tipo CriptoYa) — ver `PRD.md` secciones 5ter y 8bis
-- [ ] Agregar a `orders` los campos de congelamiento de tasa: `base_currency`, `base_amount`, `payment_currency`, `exchange_rate_applied`, `payment_amount`
-- [ ] Diseñar catálogos de ubicación: `states` (Estados), `municipalities` (Municipios, FK a Estado), `parishes` (Parroquias, FK a Municipio) — ver `PRD.md` sección 9
-- [ ] Agregar a `customers`/`orders` los campos de dirección (state_id, municipality_id, parish_id, address_reference) y de identificación (document_type, document_number, phone con formato +58)
-- [ ] Agregar campo de reserva temporal de inventario a `product_variants` u `order_items` (`reserved_until` o tabla `inventory_reservations`)
-- [ ] Crear migraciones para todas las tablas anteriores
-- [ ] Crear modelos Eloquent con relaciones (`Product hasMany Variants`, `Order hasMany Items`, `Order belongsTo Municipality`, etc.)
-- [ ] Crear seeders de datos de ejemplo: productos ficticios, categorías, una tienda demo, catálogo base de Estados/Municipios/Parroquias de Venezuela, monedas base (VES, USD, USDT, COP)
-- [ ] Definir estructura de carpetas del backend orientada a capas: `app/Domain`, `app/Http/Controllers/Api`, `app/Services`, `app/Providers` (para payment/fulfillment providers más adelante)
-- [ ] Configurar Laravel Sanctum para autenticación de API (customer + admin)
-- [ ] Crear sistema de roles: `owner` (admin dueño, acceso total) y `staff` (acceso limitado a órdenes, sin acceso a configuración sensible) — ver `PRD.md` sección 4
-- [ ] Escribir tests unitarios básicos de los modelos principales (factories + relaciones)
-- [ ] Documentar el esquema de datos en `docs/schema.md` (diagrama o tabla descriptiva)
+- [x] Diseñar esquema de base de datos: `products`, `categories`, `product_options`, `product_option_values`, `product_variants`, `variant_option_values` (pivot), `product_images` (con `option_value_id` nullable), `customers`, `orders`, `order_items`, `order_status_history`, `store_settings`, `payment_methods`, `fulfillment_methods`
+- [x] Modelar el sistema de variantes como genérico (opciones + valores + combinaciones), no con columnas fijas tipo `color`/`talla` — ver `PRD.md` sección 5bis
+- [x] Definir regla de "variante implícita" para productos sin opciones (todo producto tiene al menos una variante, aunque no tenga opciones configuradas)
+- [x] Diseñar tablas de **multimoneda**: `currencies` (código, nombre, símbolo), `exchange_rates` (moneda_origen, moneda_destino, valor, fuente, vigente_desde) con historial, `exchange_rate_settings` (por par: modo `manual`/`automático`, provider usado, frecuencia de actualización, monto de referencia para APIs tipo CriptoYa) — ver `PRD.md` secciones 5ter y 8bis
+- [x] Agregar a `orders` los campos de congelamiento de tasa: `base_currency`, `base_amount`, `payment_currency`, `exchange_rate_applied`, `payment_amount`
+- [x] Diseñar catálogos de ubicación: `states` (Estados), `municipalities` (Municipios, FK a Estado), `parishes` (Parroquias, FK a Municipio) — ver `PRD.md` sección 9
+- [x] Agregar a `customers`/`orders` los campos de dirección (state_id, municipality_id, parish_id, address_reference) y de identificación (document_type, document_number, phone con formato +58)
+- [x] Agregar campo de reserva temporal de inventario a `product_variants` u `order_items` (`reserved_until` o tabla `inventory_reservations`)
+- [x] Diseñar tabla `inventory_movements` (kardex): variante, tipo de movimiento (venta, liberación, ajuste manual), cantidad, motivo, orden relacionada (nullable), usuario admin relacionado (nullable para movimientos automáticos) — ver `PRD.md` sección 5quater
+- [x] Crear migraciones para todas las tablas anteriores
+- [x] Crear modelos Eloquent con relaciones (`Product hasMany Variants`, `Order hasMany Items`, `Order belongsTo Municipality`, etc.)
+- [x] Crear seeders de datos de ejemplo: productos ficticios, categorías, una tienda demo, catálogo base de Estados/Municipios/Parroquias de Venezuela, monedas base (VES, USD, USDT, COP)
+- [x] Definir estructura de carpetas del backend orientada a capas: `app/Domain`, `app/Http/Controllers/Api`, `app/Services`, `app/Providers` (para payment/fulfillment providers más adelante)
+- [x] Configurar Laravel Sanctum para autenticación de API (customer + admin)
+- [x] Crear sistema de roles: `owner` (admin dueño, acceso total) y `staff` (acceso limitado a órdenes, sin acceso a configuración sensible) — ver `PRD.md` sección 4
+- [x] Escribir tests unitarios básicos de los modelos principales (factories + relaciones)
+- [x] Documentar el esquema de datos en `docs/schema.md` (diagrama o tabla descriptiva)
 
 **Entregable de fase:** base de datos completa, poblada con datos de prueba, sin endpoints públicos todavía.
 
@@ -73,6 +74,7 @@ sin lógica de negocio todavía.
 - [ ] Página de listado de productos (storefront)
 - [ ] Página de detalle de producto
 - [ ] Selector de variantes en la página de detalle (por opción: ej. botones de color, dropdown de talla) que actualice precio, stock disponible e imágenes mostradas según la combinación seleccionada
+- [ ] Deshabilitar en el selector las combinaciones de variante sin stock disponible (no permitir agregar al carrito una variante agotada — sin backorder, ver `PRD.md` sección 5quater)
 - [ ] Selector de moneda de visualización (si la tienda tiene más de una habilitada) que recalcule los precios mostrados con la tasa vigente
 - [ ] Componente de tarjeta de producto reutilizable
 - [ ] Manejo de estados de carga/error en el frontend
@@ -89,7 +91,9 @@ sin lógica de negocio todavía.
 - [ ] Implementar estado de carrito en frontend (Zustand o Context) persistido en localStorage
 - [ ] UI de carrito (agregar, quitar, actualizar cantidad, ver totales)
 - [ ] Endpoint `POST /api/orders` (crear orden en estado `pending_payment`) con validación de stock
-- [ ] Reserva temporal de inventario al crear la orden (ventana configurable, ej. 30-60 min — ver `PRD.md` sección 12) y job programado que libera la reserva si expira sin pago
+- [ ] Reserva temporal de inventario al crear la orden (ventana configurable, ej. 30-60 min — ver `PRD.md` sección 12), implementada con transacción de base de datos + bloqueo de fila (`SELECT ... FOR UPDATE`) para evitar sobreventa por concurrencia
+- [ ] Registrar movimiento de tipo "reserva" en `inventory_movements` al crear la orden
+- [ ] Job programado que libera la reserva si expira sin pago (actualiza stock disponible y registra movimiento de "liberación" en `inventory_movements`)
 - [ ] Congelar tasa de cambio y moneda base/pago al crear la orden (no recalcular después)
 - [ ] Endpoints `GET /api/locations/states`, `GET /api/locations/municipalities?state_id=`, `GET /api/locations/parishes?municipality_id=` para los selects dependientes de dirección
 - [ ] Formulario de checkout: datos de envío (Estado/Municipio/Parroquia + referencia libre), datos de cliente (nombre, teléfono +58, tipo/número de documento), o checkout como invitado
@@ -119,6 +123,7 @@ sin lógica de negocio todavía.
 - [ ] UI de checkout: selección de método de pago + instrucciones dinámicas según el método (mostrando el monto ya convertido a la moneda de ese método)
 - [ ] UI de subida de comprobante post-checkout
 - [ ] Estado de orden se actualiza a `payment_submitted` al subir comprobante
+- [ ] Al confirmar el pago (acción de admin en Fase 5), convertir la reserva en descuento definitivo de stock y registrar movimiento de tipo "venta" en `inventory_movements`
 - [ ] Notificación al admin cuando llega un nuevo comprobante (email y/o link de WhatsApp, vía cola)
 
 **Entregable de fase:** cliente puede elegir método de pago, ver instrucciones en la moneda correcta, subir comprobante, y la orden refleja ese estado.
@@ -137,6 +142,8 @@ sin lógica de negocio todavía.
 - [ ] CRUD de opciones de producto (crear/editar/eliminar opciones como "Color", "Talla" y sus valores posibles)
 - [ ] Generador de variantes: a partir de las combinaciones de valores de opción, crear las variantes correspondientes (con opción de generar todas las combinaciones o seleccionar solo algunas)
 - [ ] Edición individual de variante: SKU, precio (override opcional), stock
+- [ ] Ajuste manual de stock por variante (reposición, corrección, baja por daño/pérdida), registrado en `inventory_movements` con motivo
+- [ ] Vista de historial de movimientos de inventario por variante (kardex)
 - [ ] Subida de imágenes asociadas a un valor de opción específico (ej. fotos del color "Rojo") o al producto general si no aplica opción visual
 - [ ] Listado de órdenes con filtros por estado
 - [ ] Vista de detalle de orden: ver comprobante adjunto, historial de estados, tasa de cambio aplicada
@@ -194,6 +201,7 @@ sin lógica de negocio todavía.
 **Objetivo:** pasar de "funciona en mis pruebas" a "listo para un cliente real".
 
 - [ ] Tests de integración de los flujos críticos (crear orden, subir comprobante, confirmar pago, cambiar estado de envío, expiración/liberación de reserva de inventario)
+- [ ] Test de concurrencia: dos órdenes simultáneas intentando reservar la última unidad de una variante — verificar que solo una tenga éxito y la otra reciba error de stock insuficiente
 - [ ] Revisión de seguridad: sanitización de uploads, rate limiting en endpoints públicos, validación exhaustiva de inputs
 - [ ] Revisión de permisos: separación real entre rol `owner` y `staff`, que un cliente no pueda ver/modificar órdenes de otro cliente
 - [ ] Optimización de queries (evitar N+1, revisar índices en tablas de alto volumen: `orders`, `products`, `exchange_rates`)
