@@ -1,0 +1,20 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Docker
+docker/.data/
+docker-compose.override.yml
+
+# Logs
+*.log
