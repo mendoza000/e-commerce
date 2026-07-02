@@ -252,3 +252,25 @@ el kardex solo registra movimientos definitivos (venta confirmada,
 liberación por cancelación/expiración, ajuste manual) como ledger
 append-only e inmutable — el mismo criterio de auditoría aplicado a
 `exchange_rates`.
+
+---
+
+### 2026-07-02 — Corrección: la reserva SÍ genera movimiento de kardex
+
+**Decisión:** se agrega `InventoryMovementType::Reservation` y se registra un
+movimiento de tipo `reservation` (cantidad negativa) en `inventory_movements`
+al crear una orden, además del `release` ya contemplado al liberarla.
+
+**Contexto:** esto contradice la razón dada en la entrada anterior
+(2026-07-01, "la reserva es un estado transitorio sin evento auditable
+propio"). `docs/plan.md` (Fase 3) pide explícitamente registrar ese
+movimiento al crear la orden, y en la práctica sin él el kardex queda
+incompleto: se ve el `release` de una reserva liberada/expirada pero no hay
+rastro del `reservation` que le dio origen, rompiendo la trazabilidad
+completa del ciclo de vida del stock reservado.
+
+**Razón:** se prioriza la trazabilidad completa del kardex (poder reconstruir
+por qué `reserved_quantity` subió o bajó en cualquier momento) sobre la
+brevedad original de solo registrar movimientos "definitivos". La entrada de
+2026-07-01 queda superada en este punto — se conserva por historial, no se
+reescribe.

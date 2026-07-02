@@ -14,6 +14,10 @@ class OrderStatusHistory extends Model
 
     const UPDATED_AT = null;
 
+    // The migration created a singular `order_status_history` table; without
+    // this override Eloquent guesses the pluralized `order_status_histories`.
+    protected $table = 'order_status_history';
+
     public function order(): BelongsTo
     {
         return $this->belongsTo(Order::class);

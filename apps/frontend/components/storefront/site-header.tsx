@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { CurrencySelector } from "@/components/storefront/currency-selector";
+import { CartSheet } from "@/components/storefront/cart-sheet";
 
 export function SiteHeader() {
   return (
@@ -16,6 +17,7 @@ export function SiteHeader() {
           <Input type="search" name="search" placeholder="Buscar productos..." />
         </form>
         <CurrencySelector />
+        <CartSheet />
       </div>
     </header>
   );

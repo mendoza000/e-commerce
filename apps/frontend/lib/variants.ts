@@ -1,4 +1,4 @@
-import type { ProductImage, ProductVariant } from "@/lib/api/products";
+import type { ProductImage, ProductOption, ProductVariant } from "@/lib/api/products";
 
 export function findMatchingVariant(
   variants: ProductVariant[],
@@ -41,4 +41,22 @@ export function selectImagesForSelection(
   }
 
   return images.filter((img) => img.product_option_value_id === null);
+}
+
+/**
+ * Builds a human-readable description of a variant selection, e.g. "Talla: M, Color: Azul".
+ * Used as the cart line's `variantDescription` snapshot.
+ */
+export function describeSelection(
+  options: ProductOption[],
+  selected: Record<number, number>,
+): string {
+  return options
+    .map((option) => {
+      const valueId = selected[option.id];
+      const value = option.values.find((v) => v.id === valueId);
+      return value ? `${option.name}: ${value.value}` : null;
+    })
+    .filter((part): part is string => part !== null)
+    .join(", ");
 }
