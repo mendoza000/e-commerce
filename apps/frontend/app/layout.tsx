@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { CurrencyProvider } from "@/components/providers/currency-provider";
+import { CartHydration } from "@/components/providers/cart-hydration";
 import { getCurrencies } from "@/lib/api/currencies";
 import "./globals.css";
 
@@ -33,6 +34,7 @@ export default async function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <CurrencyProvider currencies={currencies}>{children}</CurrencyProvider>
+        <CartHydration />
       </body>
     </html>
   );
