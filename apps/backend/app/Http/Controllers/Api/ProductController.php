@@ -4,12 +4,24 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\ListProductsRequest;
+use App\Http\Resources\ProductDetailResource;
 use App\Http\Resources\ProductResource;
 use App\Models\Product;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class ProductController extends Controller
 {
+    public function show(string $slug): ProductDetailResource
+    {
+        $product = Product::query()
+            ->where('slug', $slug)
+            ->where('is_active', true)
+            ->with(['category', 'options.values', 'variants.optionValues', 'images'])
+            ->firstOrFail();
+
+        return ProductDetailResource::make($product);
+    }
+
     public function index(ListProductsRequest $request): AnonymousResourceCollection
     {
         $products = Product::query()
