@@ -7,4 +7,5 @@ enum InventoryMovementType: string
     case Sale = 'sale';
     case Release = 'release';
     case Adjustment = 'adjustment';
+    case Reservation = 'reservation';
 }

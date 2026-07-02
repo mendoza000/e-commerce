@@ -29,6 +29,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'payment_amount',
     'payment_method_id',
     'fulfillment_method_id',
+    'reservation_expires_at',
 ])]
 class Order extends Model
 {
@@ -42,6 +43,7 @@ class Order extends Model
             'base_amount' => 'decimal:6',
             'exchange_rate_applied' => 'decimal:6',
             'payment_amount' => 'decimal:6',
+            'reservation_expires_at' => 'datetime',
         ];
     }
 
