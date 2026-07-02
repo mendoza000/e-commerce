@@ -29,4 +29,9 @@ class StoreSetting extends Model
     {
         return $this->belongsToMany(Currency::class, 'store_enabled_currencies');
     }
+
+    public static function current(): self
+    {
+        return static::query()->with(['baseCurrency', 'enabledCurrencies'])->firstOrFail();
+    }
 }

@@ -1,14 +1,22 @@
 <?php
 
+use App\Http\Controllers\Api\CategoryController;
+use App\Http\Controllers\Api\CurrencyController;
+use App\Http\Controllers\Api\ProductController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
+
+Route::get('/categories', [CategoryController::class, 'index']);
+Route::get('/currencies', [CurrencyController::class, 'index']);
+Route::get('/products', [ProductController::class, 'index']);
+Route::get('/products/{slug}', [ProductController::class, 'show']);
 
 Route::get('/health', function () {
     try {
         DB::connection()->getPdo();
         $db = 'connected';
-    } catch (\Throwable $e) {
+    } catch (Throwable $e) {
         $db = 'unreachable';
     }
 

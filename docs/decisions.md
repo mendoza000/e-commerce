@@ -130,6 +130,47 @@ es lo que protege contra sobreventa (PRD 5quater).
 
 ---
 
+### 2026-07-01 — `GET /api/products` filtra categoría por slug, sin rollup a subcategorías
+
+**Decisión:** el filtro `?category=` de `GET /api/products` matchea el slug
+de la categoría exacta del producto (`whereHas('category', ...)`), sin subir
+ni bajar en la jerarquía de `parent_id`. Si "Ropa" tiene la subcategoría
+"Camisas", filtrar por `ropa` no devuelve los productos de `camisas`.
+
+**Alternativas consideradas:** query recursiva que incluya productos de
+todas las subcategorías al filtrar por una categoría padre.
+
+**Razón:** el PRD no pide ese rollup, y `categories` solo tiene un nivel de
+anidación (`parent_id`, sin columna de profundidad) — construir la
+recursividad ahora sería anticipar una feature no pedida. Se documenta como
+limitación de alcance explícita, no como gap accidental; si se necesita más
+adelante, se resuelve con una query recursiva o materializando la jerarquía,
+no cambia el contrato del endpoint.
+
+---
+
+### 2026-07-01 — `ExchangeRateService` como primera clase real en `app/Services`
+
+**Decisión:** `app/Services/ExchangeRateService.php` (con `latestRate()` y
+`enabledCurrenciesWithRates()`) es la primera clase creada en
+`app/Services`, para resolver la tasa vigente de un par de monedas para
+`GET /api/currencies`. `StoreSetting::current()` (config de tienda de fila
+única) se queda como método estático del modelo, no como servicio.
+
+**Alternativas consideradas:** exponer la lógica de "última tasa" como
+scope/método en el modelo `ExchangeRate`, igual que `StoreSetting::current()`.
+
+**Razón:** "última tasa vigente para un par" es lógica de negocio real y
+reutilizable — Fase 3 (congelar la tasa al crear una orden) y Fase 4
+(`CriptoYaRateProvider`, refresco programado) necesitan la misma consulta;
+crearla ahora como servicio evita duplicarla en el código de checkout más
+adelante. `StoreSetting::current()` en cambio es una query trivial contra
+una tabla de fila única sin lógica que justifique una clase — envolverla en
+un servicio sería la carpeta-vacía que esta misma fase ya evita crear en
+otros lados.
+
+---
+
 ### 2026-07-01 — Roles y estados como string + enum de aplicación
 
 **Decisión:** los roles `owner`/`staff` se modelan como columna `role`
