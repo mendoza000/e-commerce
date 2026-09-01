@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CurrencyController;
 use App\Http\Controllers\Api\LocationController;
 use App\Http\Controllers\Api\OrderController;
+use App\Http\Controllers\Api\PaymentMethodController;
 use App\Http\Controllers\Api\ProductController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -22,6 +23,8 @@ Route::get('/locations/parishes', [LocationController::class, 'parishes']);
 // customer resolution is optional and handled inside OrderController.
 Route::post('/orders', [OrderController::class, 'store']);
 Route::get('/orders/{order:order_number}', [OrderController::class, 'show'])->middleware('throttle:20,1');
+
+Route::get('/payment-methods', [PaymentMethodController::class, 'index']);
 
 Route::get('/health', function () {
     try {

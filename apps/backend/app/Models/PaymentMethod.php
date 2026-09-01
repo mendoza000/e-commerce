@@ -2,7 +2,12 @@
 
 namespace App\Models;
 
+use App\Domain\Enums\PaymentMethodType;
+use App\Domain\Payments\Contracts\PaymentProviderInterface;
+use App\Domain\Payments\PaymentProviderRegistry;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -16,7 +21,9 @@ class PaymentMethod extends Model
     protected function casts(): array
     {
         return [
+            'type' => PaymentMethodType::class,
             'instructions' => 'array',
+            'is_active' => 'boolean',
         ];
     }
 
@@ -28,5 +35,43 @@ class PaymentMethod extends Model
     public function orders(): HasMany
     {
         return $this->hasMany(Order::class);
+    }
+
+    /**
+     * What the storefront is allowed to offer, in the order the admin arranged.
+     */
+    #[Scope]
+    protected function active(Builder $query): void
+    {
+        $query->where('is_active', true)->orderBy('position')->orderBy('id');
+    }
+
+    public function provider(): PaymentProviderInterface
+    {
+        return app(PaymentProviderRegistry::class)->for($this);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function instructionsFor(Order $order): array
+    {
+        return $this->provider()->getInstructions($order);
+    }
+
+    public function requiresProof(): bool
+    {
+        return $this->provider()->requiresProof();
+    }
+
+    /**
+     * Single accessor for the free-form `instructions` JSON the admin fills in,
+     * so providers never have to null-check the blob themselves.
+     */
+    public function instructionValue(string $key): ?string
+    {
+        $value = data_get($this->instructions, $key);
+
+        return $value === null ? null : (string) $value;
     }
 }
