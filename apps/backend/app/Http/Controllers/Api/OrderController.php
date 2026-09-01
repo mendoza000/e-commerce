@@ -21,20 +21,16 @@ class OrderController extends Controller
 
     public function show(Request $request, Order $order): OrderResource
     {
-        $customer = $request->user('customer');
-        $isOwner = $customer !== null && $order->customer_id === $customer->id;
+        // Always 404, never 403/422: a mismatch must not reveal that the
+        // order_number exists at all.
+        abort_unless(
+            $order->isAccessibleBy($request->user('customer'), $request->query('document_number')),
+            404
+        );
 
-        if (! $isOwner) {
-            $documentNumber = $request->query('document_number');
-
-            if (! $documentNumber || $documentNumber !== $order->document_number) {
-                // Always 404, never 403/422: a mismatch must not reveal that the
-                // order_number exists at all.
-                abort(404);
-            }
-        }
-
-        $order->load(['items', 'baseCurrency', 'paymentCurrency', 'state', 'municipality', 'parish']);
+        $order->load([
+            'items', 'baseCurrency', 'paymentCurrency', 'state', 'municipality', 'parish',
+        ]);
 
         return OrderResource::make($order);
     }
