@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\CurrencyController;
 use App\Http\Controllers\Api\LocationController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PaymentMethodController;
+use App\Http\Controllers\Api\PaymentProofController;
 use App\Http\Controllers\Api\ProductController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -25,6 +26,11 @@ Route::post('/orders', [OrderController::class, 'store']);
 Route::get('/orders/{order:order_number}', [OrderController::class, 'show'])->middleware('throttle:20,1');
 
 Route::get('/payment-methods', [PaymentMethodController::class, 'index']);
+
+// Same guest-friendly access rule as GET /orders/{order}: ownership is checked
+// inside the controller. Throttled harder because it accepts file uploads.
+Route::post('/orders/{order:order_number}/payment-proof', [PaymentProofController::class, 'store'])
+    ->middleware('throttle:10,1');
 
 Route::get('/health', function () {
     try {

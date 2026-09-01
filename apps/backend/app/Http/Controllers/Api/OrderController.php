@@ -30,6 +30,7 @@ class OrderController extends Controller
 
         $order->load([
             'items', 'baseCurrency', 'paymentCurrency', 'state', 'municipality', 'parish',
+            'paymentMethod.currency', 'latestPaymentProof',
         ]);
 
         return OrderResource::make($order);

@@ -49,6 +49,7 @@ class OrderResource extends JsonResource
             // Everything the customer needs to actually pay: account details
             // plus the amount already converted to this method's currency.
             'payment_instructions' => $this->whenLoaded('paymentMethod', fn () => $this->paymentInstructions()),
+            'payment_proof' => PaymentProofResource::make($this->whenLoaded('latestPaymentProof')),
             'items' => OrderItemResource::collection($this->whenLoaded('items')),
             'reservation_expires_at' => $this->reservation_expires_at?->toISOString(),
             'created_at' => $this->created_at?->toISOString(),
