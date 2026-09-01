@@ -1,5 +1,6 @@
 <?php
 
+use App\Domain\Exceptions\InvalidOrderTransition;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -46,6 +47,21 @@ return Application::configure(basePath: dirname(__DIR__))
                     'message' => $e->getMessage(),
                     'code' => 'validation_error',
                     'fields' => $e->errors(),
+                ],
+            ], 422);
+        });
+
+        // An order was asked for a status change the business does not allow.
+        // That is a rejected request, not a server fault.
+        $exceptions->render(function (InvalidOrderTransition $e, Request $request) {
+            if (! $request->is('api/*')) {
+                return null;
+            }
+
+            return response()->json([
+                'error' => [
+                    'message' => $e->getMessage(),
+                    'code' => 'invalid_order_transition',
                 ],
             ], 422);
         });

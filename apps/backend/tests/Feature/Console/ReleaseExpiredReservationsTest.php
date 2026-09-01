@@ -128,4 +128,52 @@ class ReleaseExpiredReservationsTest extends TestCase
 
         $this->assertSame(1, $order->fresh()->statusHistory()->count());
     }
+
+    public function test_sweeps_orders_whose_proof_was_never_reviewed(): void
+    {
+        $variant = ProductVariant::factory()->create(['stock' => 10, 'reserved_quantity' => 2]);
+
+        // The customer uploaded a proof and nobody looked at it within
+        // commerce.payment_review_minutes. Without this sweep the stock would
+        // stay frozen forever.
+        $order = Order::factory()->create([
+            'status' => OrderStatus::PaymentSubmitted,
+            'reservation_expires_at' => now()->subMinute(),
+        ]);
+
+        OrderItem::factory()->create([
+            'order_id' => $order->id,
+            'product_variant_id' => $variant->id,
+            'sku' => $variant->sku,
+            'quantity' => 2,
+        ]);
+
+        $this->artisan('orders:release-expired-reservations')->assertExitCode(0);
+
+        $this->assertSame(0, $variant->fresh()->reserved_quantity);
+        $this->assertSame(OrderStatus::Cancelled, $order->fresh()->status);
+        $this->assertSame('payment_submitted', $order->fresh()->statusHistory()->latest('id')->first()->from_status);
+    }
+
+    public function test_a_submitted_proof_still_inside_its_review_window_is_left_alone(): void
+    {
+        $variant = ProductVariant::factory()->create(['stock' => 10, 'reserved_quantity' => 2]);
+
+        $order = Order::factory()->create([
+            'status' => OrderStatus::PaymentSubmitted,
+            'reservation_expires_at' => now()->addDays(2),
+        ]);
+
+        OrderItem::factory()->create([
+            'order_id' => $order->id,
+            'product_variant_id' => $variant->id,
+            'sku' => $variant->sku,
+            'quantity' => 2,
+        ]);
+
+        $this->artisan('orders:release-expired-reservations')->assertExitCode(0);
+
+        $this->assertSame(2, $variant->fresh()->reserved_quantity);
+        $this->assertSame(OrderStatus::PaymentSubmitted, $order->fresh()->status);
+    }
 }

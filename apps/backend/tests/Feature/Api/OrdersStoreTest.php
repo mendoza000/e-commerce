@@ -7,6 +7,7 @@ use App\Models\Customer;
 use App\Models\ExchangeRate;
 use App\Models\Municipality;
 use App\Models\Parish;
+use App\Models\PaymentMethod;
 use App\Models\ProductVariant;
 use App\Models\State;
 use App\Models\StoreSetting;
@@ -22,6 +23,10 @@ class OrdersStoreTest extends TestCase
 
     private Currency $ves;
 
+    private PaymentMethod $usdMethod;
+
+    private PaymentMethod $vesMethod;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -34,6 +39,9 @@ class OrdersStoreTest extends TestCase
             'base_currency_id' => $this->usd->id,
         ]);
         $store->enabledCurrencies()->sync([$this->usd->id, $this->ves->id]);
+
+        $this->usdMethod = PaymentMethod::factory()->zelle()->create(['currency_id' => $this->usd->id]);
+        $this->vesMethod = PaymentMethod::factory()->create(['currency_id' => $this->ves->id]);
     }
 
     /**
@@ -63,7 +71,7 @@ class OrdersStoreTest extends TestCase
             'document_type' => 'V',
             'document_number' => '12345678',
             'address_reference' => 'Cerca de la plaza',
-            'payment_currency_id' => $this->usd->id,
+            'payment_method_id' => $this->usdMethod->id,
         ], $this->makeAddress(), $overrides);
     }
 
@@ -125,7 +133,7 @@ class OrdersStoreTest extends TestCase
         $variant = ProductVariant::factory()->create(['price_override' => 10, 'stock' => 10]);
 
         $payload = $this->basePayload([
-            'payment_currency_id' => $this->ves->id,
+            'payment_method_id' => $this->vesMethod->id,
             'items' => [['product_variant_id' => $variant->id, 'quantity' => 1]],
         ]);
 
