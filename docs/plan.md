@@ -363,16 +363,34 @@ Frontend:
 
 **Objetivo:** completar el ciclo de vida de la orden con la lógica de envío.
 
-- [ ] Definir interfaz `FulfillmentProviderInterface`
-- [ ] Implementar `DeliveryPropioProvider`, `RetiroEnTiendaProvider`, `CourierManualProvider`
-- [ ] Tabla/config de métodos de envío editable desde admin, con tarifas asociadas a zonas (Estado/Municipio)
-- [ ] Selección de método de envío en checkout (si aplica más de una opción)
-- [ ] Cálculo de costo de envío básico (tarifa plana por zona o "a coordinar")
-- [ ] Campo de tracking/courier/nota libre al marcar orden como enviada
-- [ ] Notificaciones al cliente en cambios de estado clave (pago confirmado, enviado, entregado) vía email y link de WhatsApp (`wa.me` prellenado)
-- [ ] Página de "mis pedidos" en el storefront (cliente autenticado) con historial y estado actual
+Backend:
 
-**Entregable de fase:** ciclo de vida completo de la orden, de creación a entrega, con visibilidad para cliente y admin.
+- [x] Interfaz `FulfillmentProviderInterface` (`app/Domain/Fulfillment/Contracts`) — `type()`, `label()`, `requiresTrackingCode()`, `estimateCost(state, municipality)`
+- [x] `DeliveryPropioProvider`, `RetiroEnTiendaProvider`, `CourierManualProvider` — los dos primeros vía `ManualFulfillmentProvider` (tarifa por zona con fallback a `base_cost`); retiro en tienda siempre cuesta 0, sin extender esa base — ver `docs/decisions.md`
+- [x] Tabla `fulfillment_zone_rates` (Estado/Municipio, costo nullable = "a coordinar") + CRUD de métodos de envío y tarifas por zona en `/api/admin/fulfillment-methods` y `/api/admin/zone-rates`, con `types`/`reorder` como en métodos de pago
+- [x] Endpoint público `GET /api/fulfillment-methods` (con costo estimado si se manda `state_id`/`municipality_id`) y `fulfillment_method_id` **opcional** en `POST /api/orders` — a diferencia de `payment_method_id`, ver `docs/decisions.md`
+- [x] `orders.shipping_amount` se congela en moneda base al crear la orden y se suma antes de convertir a `payment_amount`; "a coordinar" nunca bloquea el checkout
+- [x] `orders.courier`/`tracking_code`/`shipping_note`: el endpoint de transición a `shipped` los acepta y los rechaza para cualquier otro estado
+- [x] Notificación `OrderStatusUpdated` (pago confirmado/enviado/entregado) al cliente registrado con email, vía `CustomerNotificationService`, con link `wa.me` al número de la tienda — alcance limitado a cuentas registradas, ver `docs/decisions.md`
+- [x] Cuenta de cliente: `POST /api/customer/register`, `POST /api/customer/login` (token Sanctum, no cookie — ver `docs/decisions.md`), `POST /api/customer/logout`, `GET /api/customer/me`
+- [x] Endpoint `GET /api/my-orders` ("mis pedidos", cliente autenticado)
+- [x] Tests: 90 casos nuevos — cubren los tres providers y la resolución de tarifas por zona, el CRUD de métodos/tarifas de envío con el rebote de `staff`, el checkout con costo de envío (tarifa plana, override por zona, "a coordinar", conversión de moneda), la transición a `shipped` con datos de courier, las notificaciones al cliente (incluidas las que deliberadamente no se envían: invitado, sin email, estado fuera del conjunto notificable) y el ciclo completo de cuenta de cliente (registro, login, rate limiting, logout, mis pedidos). Suite completa: 625 casos en verde
+
+Frontend:
+
+- [ ] Pantalla de configuración de métodos de envío y tarifas por zona en el panel
+- [ ] Selección de método de envío en checkout (si aplica más de una opción), mostrando el costo estimado o "a coordinar"
+- [ ] Campo de courier/tracking/nota en la UI de "marcar como enviada"
+- [ ] Registro/login de cliente y página de "mis pedidos" en el storefront
+
+**Entregable de fase:** ciclo de vida completo de la orden, de creación a entrega, con visibilidad para cliente y admin. Backend completo y probado; queda la UI del panel y del storefront.
+
+### Decisiones tomadas durante la Fase 6 (backend)
+
+Ver `docs/decisions.md`, entradas del 2026-09-02: zonas de envío como tabla
+propia con `base_cost` como tarifa sin zona, `fulfillment_method_id` opcional
+en el checkout, cuenta de cliente por token Sanctum en vez de cookie de
+sesión, y notificación al cliente limitada a cuentas registradas con email.
 
 ---
 
