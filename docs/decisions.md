@@ -274,3 +274,92 @@ por qué `reserved_quantity` subió o bajó en cualquier momento) sobre la
 brevedad original de solo registrar movimientos "definitivos". La entrada de
 2026-07-01 queda superada en este punto — se conserva por historial, no se
 reescribe.
+
+---
+
+### 2026-09-01 — Sesión del admin: Sanctum SPA por cookie, no token Bearer
+
+**Decisión:** el panel se autentica con una sesión first-party de Sanctum
+(cookie + CSRF), no con un token Bearer. Se habilita `statefulApi()` en
+`bootstrap/app.php` y el navegador llama a la API directamente.
+
+**Alternativas consideradas:** token Bearer emitido por Laravel y guardado por
+Next.js en una cookie `httpOnly`, reenviado como header `Authorization`.
+
+**Razón:** es el camino oficial de Laravel para SPAs de primera parte, no
+requiere que Next.js actúe como proxy de autenticación, y evita tener que
+gestionar el ciclo de vida de un token a mano.
+
+**Implicaciones técnicas:**
+- **Frontend y backend deben compartir dominio padre**, porque la cookie de
+  sesión no cruza dominios distintos. Los dominios de desarrollo cambian:
+  backend `api.tienda.test`, frontend `tienda.test` (antes `backend.test` y
+  `localhost:3000`). En producción se replica con `tienda.com` /
+  `api.tienda.com`.
+- `SESSION_DOMAIN=.tienda.test` y `SANCTUM_STATEFUL_DOMAINS` en el `.env` del
+  backend; `config/cors.php` suma `sanctum/csrf-cookie` a sus `paths` y ya
+  tenía `supports_credentials: true`.
+- Toda escritura desde el panel manda el header `X-XSRF-TOKEN` leído de la
+  cookie: `fetch` no lo hace solo (a diferencia de axios). Ver
+  `lib/api/admin/client.ts`, que además reintenta una vez ante un 419.
+- Las páginas del panel se renderizan en cliente: la cookie vive en el
+  navegador, así que es él quien habla con la API. El layout servidor le pasa
+  la URL pública de la API como prop, para no bakearla en build.
+- En los tests, Sanctum solo adjunta sesión a requests cuyo `Origin` coincide
+  con un dominio stateful — de ahí `TestCase::actingFromAdminPanel()`.
+
+---
+
+### 2026-09-01 — Frontera de permisos: staff solo opera pedidos
+
+**Decisión:** `staff` puede listar, ver y transicionar órdenes (incluido
+confirmar y rechazar pagos) y leer el catálogo. Todo lo demás — escritura de
+catálogo, inventario, usuarios, tasas de cambio, métodos de pago y
+configuración de tienda — es exclusivo de `owner`.
+
+**Alternativas consideradas:** dejar que staff también edite catálogo y stock,
+restringiendo solo la configuración "sensible" que menciona el PRD.
+
+**Razón:** el PRD (sección 4) solo define staff por lo que *no* puede hacer
+("configuración sensible"), lo cual no alcanza para escribir un middleware. Se
+elige la lectura estricta: staff es un rol de operación de pedidos, no de
+administración de la tienda. Es la frontera más fácil de explicar a un cliente
+y la más fácil de ampliar después si hace falta.
+
+**Implicaciones técnicas:**
+- Se implementa con el middleware `role:owner` sobre grupos de rutas, más
+  Policies en `app/Policies` para las reglas por registro.
+- `UserResource` expone un bloque `permissions` para que el panel oculte lo que
+  la cuenta no puede usar. Es una pista de UI: la autoridad sigue siendo el
+  backend, que responde 403 igual.
+- La tienda nunca puede quedarse sin owner activo. No hace falta una regla
+  explícita para eso: `UserPolicy::deactivate` prohíbe autodesactivarse, y
+  desactivar a otro exige ser owner activo — con lo cual el objetivo nunca era
+  el último. La única fuga restante, autodegradarse a staff, la cierra
+  `UserUpdateRequest::after()`.
+
+---
+
+### 2026-09-01 — Cuentas de admin desactivables, nunca borrables
+
+**Decisión:** los usuarios admin se desactivan con una columna `is_active`; no
+se eliminan ni se usa borrado lógico.
+
+**Alternativas consideradas:** `deactivated_at` (timestamp), o `SoftDeletes`.
+
+**Razón:** un operador que procesó órdenes tiene que seguir siendo resoluble
+desde `order_status_history.changed_by` para siempre. `is_active` booleano
+mantiene la columna consistente con el resto del esquema, que ya usa ese mismo
+nombre en productos, variantes, métodos de pago, métodos de envío y
+configuración de tasas.
+
+**Implicaciones técnicas:**
+- Desactivar también borra las sesiones abiertas de esa cuenta
+  (`User::invalidateSessions()`, driver `database`), para que el cierre sea
+  inmediato y no en el próximo login.
+- El middleware `active` cubre lo que ese borrado no puede: drivers de sesión
+  inalcanzables o requests ya en vuelo.
+- `AuthController::logout()` llama a `Auth::forgetGuards()`, porque
+  `auth:sanctum` resuelve por un `RequestGuard` que cachea el usuario y no se
+  limpia al cerrar sesión del guard `web`. Con php-fpm el proceso muere antes
+  de que importe; con un worker de larga vida sería identidad obsoleta.

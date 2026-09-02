@@ -2,6 +2,19 @@ export function getApiBaseUrl(): string {
   return process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "";
 }
 
+/**
+ * The API origin as the *browser* can reach it, which is not always the one
+ * the Next server uses: inside Docker `API_URL` is a container hostname.
+ *
+ * Read this on the server and hand the value to client components as a prop.
+ * Referencing `process.env` from client code would bake the URL in at build
+ * time, and a template deployed per client cannot afford that (see
+ * docs/decisions.md).
+ */
+export function getPublicApiBaseUrl(): string {
+  return process.env.NEXT_PUBLIC_API_URL ?? process.env.API_URL ?? "";
+}
+
 /** Shape of the JSON body the backend returns for error responses (see bootstrap/app.php). */
 export interface ApiErrorBody {
   error: {

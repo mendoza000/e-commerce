@@ -38,20 +38,20 @@ cp .env.example .env
 php artisan key:generate
 ```
 
-Parkear el sitio con Herd para que quede en `http://backend.test`:
+Parkear el sitio con Herd para que quede en `http://api.tienda.test`:
 
 ```bash
-herd link backend
+herd link api.tienda
 ```
 
 Correr las migraciones (contra el Postgres de Docker, ya expuesto en
 `127.0.0.1:5432`):
 
 ```bash
-php artisan migrate
+php artisan migrate --seed
 ```
 
-Probar: `http://backend.test/api/health` debe responder
+Probar: `http://api.tienda.test/api/health` debe responder
 `{"status":"ok","db":"connected"}`.
 
 ### 3. Frontend (Next.js vía Bun)
@@ -59,11 +59,35 @@ Probar: `http://backend.test/api/health` debe responder
 ```bash
 cd apps/frontend
 bun install
-cp .env.example .env
+cp .env.example .env.local
 bun dev
 ```
 
-Abrir `http://localhost:3000` — debe mostrar `API: ok · DB: connected`.
+El panel admin se autentica con una sesión de Sanctum, y esa cookie no cruza
+dominios distintos. Por eso el frontend **no** se abre en `localhost:3000`
+sino bajo el mismo dominio padre que la API, proxeado por Herd:
+
+```bash
+herd proxy tienda http://localhost:3000
+```
+
+Abrir `http://tienda.test` — debe mostrar `API: ok · DB: connected`.
+
+> Si cambias estos dominios, actualizá también `APP_URL`, `FRONTEND_URL`,
+> `SESSION_DOMAIN` y `SANCTUM_STATEFUL_DOMAINS` en `apps/backend/.env`, y
+> `API_URL` / `NEXT_PUBLIC_API_URL` en `apps/frontend/.env.local`. Frontend y
+> backend tienen que compartir dominio padre (ver `docs/decisions.md`).
+
+### 4. Panel de administración
+
+El seeder crea dos cuentas de prueba, ambas con contraseña `password`:
+
+| Correo | Rol | Acceso |
+|---|---|---|
+| `test@example.com` | `owner` | Total |
+| `staff@example.com` | `staff` | Solo pedidos |
+
+Abrir `http://tienda.test/admin`.
 
 ## Verificación de paridad con producción (Docker completo)
 

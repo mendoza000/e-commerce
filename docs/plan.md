@@ -23,7 +23,7 @@ sin lógica de negocio todavía.
 - [x] Crear `docker-compose.yml` con servicios: `backend`, `frontend`, `db`, `redis` (para colas/cache)
 - [x] Crear `Dockerfile` para backend (PHP-FPM + Nginx o usar `php artisan serve` en dev)
 - [x] Crear `Dockerfile` para frontend usando imagen base `oven/bun` (multi-stage build: `bun install` → `bun run build` → runtime standalone de Next.js)
-- [ ] Configurar `.env.example` en backend y frontend con todas las variables previstas (aunque no se usen todas aún)
+- [x] Configurar `.env.example` en backend y frontend con todas las variables previstas (aunque no se usen todas aún) — el del frontend se creó en la Fase 5a
 - [x] Verificar que `docker-compose up` levanta los 3-4 servicios sin errores
 - [x] Verificar conectividad backend → base de datos (migración de prueba)
 - [x] Verificar que frontend puede hacer un fetch de prueba al backend (endpoint `/api/health`)
@@ -148,29 +148,45 @@ sin lógica de negocio todavía.
 
 **Objetivo:** el admin puede operar la tienda sin tocar la base de datos directamente.
 
-- [ ] Rutas `/admin/*` embebidas en el mismo Next.js (decisión ya tomada en Fase 0)
-- [ ] Login de admin (usando Sanctum)
-- [ ] Middleware de protección de rutas admin (frontend y backend), incluyendo distinción de permisos `owner` vs `staff`
-- [ ] Gestión de usuarios staff: crear/desactivar cuentas de operador con acceso limitado a órdenes
-- [ ] CRUD de productos y categorías desde el panel (crear, editar, eliminar, gestión de imágenes)
-- [ ] CRUD de opciones de producto (crear/editar/eliminar opciones como "Color", "Talla" y sus valores posibles)
-- [ ] Generador de variantes: a partir de las combinaciones de valores de opción, crear las variantes correspondientes (con opción de generar todas las combinaciones o seleccionar solo algunas)
-- [ ] Edición individual de variante: SKU, precio (override opcional), stock
-- [ ] Ajuste manual de stock por variante (reposición, corrección, baja por daño/pérdida), registrado en `inventory_movements` con motivo
-- [ ] Vista de historial de movimientos de inventario por variante (kardex)
-- [ ] Subida de imágenes asociadas a un valor de opción específico (ej. fotos del color "Rojo") o al producto general si no aplica opción visual
-- [ ] Listado de órdenes con filtros por estado
-- [ ] Vista de detalle de orden: ver comprobante adjunto, historial de estados, tasa de cambio aplicada
-- [ ] Acción: confirmar pago (`payment_submitted` → `paid`) / rechazar pago (con motivo, vuelve a `pending_payment`)
-- [ ] Acción: marcar en preparación / marcar enviado (con courier/nota opcional) / marcar entregado / cancelar
-- [ ] Registro de `order_status_history` en cada transición (quién, cuándo, motivo)
-- [ ] Pantalla de configuración de tienda: datos generales, logo, colores, moneda base, monedas habilitadas
-- [ ] Pantalla de gestión de tasas de cambio: registrar nueva tasa manual, ver historial, y configurar por par si la fuente es manual o automática (CriptoYa), incluyendo frecuencia de actualización y monto de referencia
-- [ ] Pantalla de configuración de métodos de pago (activar/desactivar, editar datos, moneda asociada) — restringida a rol `owner`
-- [ ] Pantalla de configuración de métodos de envío/zonas
-- [ ] Pantalla de configuración de número de WhatsApp de contacto de la tienda
+Es la fase más grande del plan, así que va partida en cuatro sub-fases que se
+cierran y se demuestran por separado (ver "Notas de proceso"). El orden importa:
+5a habilita a las demás, y 5b es la que entrega valor operativo real más rápido
+— sin ella la tienda no puede cobrar una venta.
 
-**Entregable de fase:** flujo completo operable — un admin puede gestionar catálogo y procesar órdenes de principio a fin sin acceso directo a la BD, con separación de permisos owner/staff.
+### Decisiones a tomar antes de escribir código
+
+- [x] **Estrategia de sesión del admin**: se eligió **Sanctum SPA por cookie**. Implica que frontend y backend comparten dominio padre — los dominios de desarrollo pasan a ser `tienda.test` (frontend) y `api.tienda.test` (backend). Ver `docs/decisions.md`
+- [x] **Convivencia de guards**: las rutas admin usan el guard `web` (que resuelve a `User`) y las de cliente el guard `customer`. Ver `docs/decisions.md`
+- [x] **Frontera `owner` vs `staff`**: staff opera pedidos y lee catálogo; todo lo demás es `owner`. Ver `docs/decisions.md`
+
+---
+
+### Fase 5a — Autenticación, permisos y usuarios staff
+
+**Objetivo:** que exista un admin autenticado con permisos reales antes de construir una sola pantalla de gestión.
+
+Backend:
+
+- [x] Endpoints de sesión: `POST /api/admin/login`, `POST /api/admin/logout`, `GET /api/admin/me`, con rate limiting en el login (5 intentos por email+IP, más `throttle:10,1` en la ruta)
+- [x] Migración: agregar columna de desactivación a `users` — se eligió `is_active`, ver `docs/decisions.md`
+- [x] Rechazar a usuarios desactivados en el login y en cada request (middleware `active`), e invalidar sus sesiones vigentes al desactivarlos
+- [x] Middleware de rol (`role:owner`) + `UserPolicy` en `app/Policies`
+- [x] Grupo de rutas `/api/admin/*` en `routes/admin.php`, separado de las rutas públicas de `routes/api.php`
+- [x] CRUD de usuarios staff (crear, editar, desactivar/reactivar) restringido a `owner`, impidiendo que un owner se desactive a sí mismo o que la tienda quede sin owners activos
+- [x] Manejo de 401/403 en el formato de error estándar de la API (antes un 403 caía en el catch-all de 500 en producción)
+- [x] Tests de feature: 27 casos en `tests/Feature/Api/Admin` — login/logout, usuario desactivado rechazado, no divulgación de existencia de cuentas, rate limiting, staff rebotado con 403 en cada endpoint restringido, invariante de "siempre queda un owner activo"
+- [x] Tests unitarios: 18 casos en `tests/Unit/Models/UserAccountTest` (activación, scopes, casos borde de `isLastActiveOwner`, invalidación de sesiones) y `tests/Unit/Http/EnsureUserHasRoleTest` (varios roles permitidos, request sin usuario, rol inexistente)
+
+Frontend:
+
+- [x] Rutas `/admin/*` embebidas en el mismo Next.js (decisión ya tomada en Fase 0), con layout propio separado del storefront
+- [x] Pantalla de login de admin
+- [x] Protección de rutas admin en el frontend (`RequireAdmin`) + manejo de sesión expirada (redirect a login)
+- [x] Ocultar en la UI lo que el rol no puede usar (bloque `permissions` de `UserResource`) — sin confiar en eso como seguridad: la autoridad es el backend
+- [x] Pantalla de gestión de usuarios staff
+- [ ] Verificar el build del frontend (`bun install && bun run build`) — no se pudo ejecutar en el entorno donde se escribió el código
+
+**Entregable de sub-fase:** un owner y un staff inician sesión, ven menús distintos, y el staff recibe 403 del backend si intenta tocar configuración.
 
 ---
 
