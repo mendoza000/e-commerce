@@ -6,6 +6,7 @@ use App\Domain\Enums\DocumentType;
 use App\Models\Municipality;
 use App\Models\Parish;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Enum;
 use Illuminate\Validation\Validator;
 
@@ -33,11 +34,23 @@ class OrderStoreRequest extends FormRequest
             'parish_id' => ['required', 'integer', 'exists:parishes,id'],
             'address_reference' => ['required', 'string'],
 
-            'payment_currency_id' => [
+            // The payment currency is NOT accepted from the client: it is
+            // whatever the chosen method charges in (PaymentMethod::currency),
+            // so an order can never be frozen in one currency and paid in
+            // another. See OrderService::createOrder.
+            'payment_method_id' => [
                 'required',
                 'integer',
-                'exists:currencies,id',
-                'exists:store_enabled_currencies,currency_id',
+                Rule::exists('payment_methods', 'id')->where('is_active', true),
+            ],
+
+            // Optional, unlike payment_method_id: PRD section 6 only asks for a
+            // selector "si aplica más de una opción" — a store with one method,
+            // or none configured yet, still has to be able to check out.
+            'fulfillment_method_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('fulfillment_methods', 'id')->where('is_active', true),
             ],
         ];
     }
