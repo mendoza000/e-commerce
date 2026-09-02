@@ -43,6 +43,15 @@ class OrderStoreRequest extends FormRequest
                 'integer',
                 Rule::exists('payment_methods', 'id')->where('is_active', true),
             ],
+
+            // Optional, unlike payment_method_id: PRD section 6 only asks for a
+            // selector "si aplica más de una opción" — a store with one method,
+            // or none configured yet, still has to be able to check out.
+            'fulfillment_method_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('fulfillment_methods', 'id')->where('is_active', true),
+            ],
         ];
     }
 

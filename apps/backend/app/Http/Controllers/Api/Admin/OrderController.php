@@ -11,6 +11,7 @@ use App\Http\Requests\Api\Admin\TransitionOrderRequest;
 use App\Http\Resources\Admin\OrderResource;
 use App\Models\Order;
 use App\Models\User;
+use App\Services\CustomerNotificationService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -29,10 +30,12 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
  */
 class OrderController extends Controller
 {
+    public function __construct(private readonly CustomerNotificationService $notifications) {}
+
     public function index(ListOrdersRequest $request): AnonymousResourceCollection
     {
         $orders = Order::query()
-            ->with(['baseCurrency', 'paymentCurrency', 'paymentMethod'])
+            ->with(['baseCurrency', 'paymentCurrency', 'paymentMethod', 'fulfillmentMethod'])
             ->withCount('items')
             ->when(
                 $request->filled('status'),
@@ -59,6 +62,8 @@ class OrderController extends Controller
     {
         $order->confirmPayment($this->admin($request));
 
+        $this->notifications->notifyStatusChange($order->fresh());
+
         return $this->detail($order->fresh());
     }
 
@@ -71,11 +76,18 @@ class OrderController extends Controller
 
     public function transition(TransitionOrderRequest $request, Order $order): OrderResource
     {
+        $target = OrderStatus::from((string) $request->string('status'));
+
         $order->advanceTo(
-            OrderStatus::from((string) $request->string('status')),
+            $target,
             $this->admin($request),
             $request->input('reason'),
+            $request->shippingDetails(),
         );
+
+        if (in_array($target, [OrderStatus::Shipped, OrderStatus::Delivered], true)) {
+            $this->notifications->notifyStatusChange($order->fresh());
+        }
 
         return $this->detail($order->fresh());
     }
@@ -101,6 +113,7 @@ class OrderController extends Controller
             'municipality',
             'parish',
             'paymentMethod',
+            'fulfillmentMethod',
             // Newest proof first: after a rejection there can be several, and
             // the last one is the one under review.
             'paymentProofs' => fn ($query) => $query->orderByDesc('submitted_at')->orderByDesc('id'),

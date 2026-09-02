@@ -252,4 +252,41 @@ class OrderLifecycleTest extends TestCase
             $order->statusHistory()->where('to_status', 'preparing')->count()
         );
     }
+
+    public function test_marking_shipped_stores_the_courier_tracking_and_note(): void
+    {
+        $admin = User::factory()->create();
+        $order = $this->reservedOrder();
+        $order->markPaymentSubmitted();
+        $order->confirmPayment($admin);
+        $order->advanceTo(OrderStatus::Preparing, $admin);
+
+        $order->advanceTo(OrderStatus::Shipped, $admin, shipping: [
+            'courier' => 'MRW',
+            'tracking_code' => 'ABC123',
+            'shipping_note' => 'Dejar en portería.',
+        ]);
+
+        $fresh = $order->fresh();
+        $this->assertSame(OrderStatus::Shipped, $fresh->status);
+        $this->assertSame('MRW', $fresh->courier);
+        $this->assertSame('ABC123', $fresh->tracking_code);
+        $this->assertSame('Dejar en portería.', $fresh->shipping_note);
+    }
+
+    public function test_advancing_without_shipping_details_leaves_them_null(): void
+    {
+        $admin = User::factory()->create();
+        $order = $this->reservedOrder();
+        $order->markPaymentSubmitted();
+        $order->confirmPayment($admin);
+        $order->advanceTo(OrderStatus::Preparing, $admin);
+
+        $order->advanceTo(OrderStatus::Shipped, $admin);
+
+        $fresh = $order->fresh();
+        $this->assertSame(OrderStatus::Shipped, $fresh->status);
+        $this->assertNull($fresh->courier);
+        $this->assertNull($fresh->tracking_code);
+    }
 }

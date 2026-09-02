@@ -62,6 +62,17 @@ class OrderResource extends JsonResource
                 'type' => $this->paymentMethod->type->value,
                 'label' => $this->paymentMethod->label,
             ] : null),
+            'fulfillment_method' => $this->whenLoaded('fulfillmentMethod', fn () => $this->fulfillmentMethod ? [
+                'id' => $this->fulfillmentMethod->id,
+                'type' => $this->fulfillmentMethod->type->value,
+                'label' => $this->fulfillmentMethod->label,
+            ] : null),
+            'shipping_amount' => $this->shipping_amount,
+            'shipping' => [
+                'courier' => $this->courier,
+                'tracking_code' => $this->tracking_code,
+                'note' => $this->shipping_note,
+            ],
             'items' => OrderItemResource::collection($this->whenLoaded('items')),
             'items_count' => $this->whenCounted('items'),
             'payment_proofs' => PaymentProofResource::collection($this->whenLoaded('paymentProofs')),

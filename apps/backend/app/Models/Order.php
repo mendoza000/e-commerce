@@ -35,6 +35,10 @@ use Illuminate\Support\Facades\DB;
     'payment_amount',
     'payment_method_id',
     'fulfillment_method_id',
+    'shipping_amount',
+    'courier',
+    'tracking_code',
+    'shipping_note',
     'reservation_expires_at',
 ])]
 class Order extends Model
@@ -49,6 +53,7 @@ class Order extends Model
             'base_amount' => 'decimal:6',
             'exchange_rate_applied' => 'decimal:6',
             'payment_amount' => 'decimal:6',
+            'shipping_amount' => 'decimal:6',
             'reservation_expires_at' => 'datetime',
         ];
     }
@@ -257,11 +262,19 @@ class Order extends Model
      * actions, so two admins clicking at once cannot both write a history
      * entry for the same move.
      *
+     * `$shipping` carries the free-form courier/tracking/note fields the panel
+     * may capture when marking an order shipped (PRD section 6). It is only
+     * ever applied together with the Shipped transition — TransitionOrderRequest
+     * rejects it for any other target — so this method does not need to check
+     * $target itself before saving it.
+     *
+     * @param  array{courier?: ?string, tracking_code?: ?string, shipping_note?: ?string}  $shipping
+     *
      * @throws InvalidOrderTransition
      */
-    public function advanceTo(OrderStatus $target, User $admin, ?string $reason = null): void
+    public function advanceTo(OrderStatus $target, User $admin, ?string $reason = null, array $shipping = []): void
     {
-        DB::transaction(function () use ($target, $admin, $reason) {
+        DB::transaction(function () use ($target, $admin, $reason, $shipping) {
             $this->lockAndRefresh();
 
             if ($this->status === $target) {
@@ -269,6 +282,10 @@ class Order extends Model
             }
 
             $this->transitionTo($target, $admin, $reason);
+
+            if ($shipping !== []) {
+                $this->update($shipping);
+            }
         });
     }
 

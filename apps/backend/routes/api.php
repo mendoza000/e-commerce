@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CurrencyController;
+use App\Http\Controllers\Api\FulfillmentMethodController;
 use App\Http\Controllers\Api\LocationController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PaymentMethodController;
@@ -30,6 +31,9 @@ Route::post('/orders', [OrderController::class, 'store']);
 Route::get('/orders/{order:order_number}', [OrderController::class, 'show'])->middleware('throttle:20,1');
 
 Route::get('/payment-methods', [PaymentMethodController::class, 'index']);
+
+// Priced only when ?state_id= is given — see Api\FulfillmentMethodController.
+Route::get('/fulfillment-methods', [FulfillmentMethodController::class, 'index']);
 
 // Same guest-friendly access rule as GET /orders/{order}: ownership is checked
 // inside the controller. Throttled harder because it accepts file uploads.
