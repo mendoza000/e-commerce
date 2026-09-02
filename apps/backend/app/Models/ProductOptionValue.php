@@ -28,4 +28,10 @@ class ProductOptionValue extends Model
     {
         return $this->hasMany(ProductImage::class, 'product_option_value_id');
     }
+
+    /** See ProductOption::isUsedByVariants for why this blocks deletion. */
+    public function isUsedByVariants(): bool
+    {
+        return $this->variants()->exists();
+    }
 }

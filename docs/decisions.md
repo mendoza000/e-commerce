@@ -450,3 +450,156 @@ colateral. Las tres que no mueven nada más que la orden sí comparten endpoint.
   siendo el backend, que responde 422 igual.
 - Las órdenes quedan fuera del grupo `role:owner`: `staff` es un rol de
   operación de pedidos y ejecuta las cuatro acciones.
+
+---
+
+### 2026-09-01 — El stock no se edita: se ajusta con motivo
+
+**Decisión:** `PATCH /api/admin/variants/{variant}` acepta `sku`,
+`price_override` e `is_active`, y **rechaza** `stock` con un 422 explícito
+(`stock.prohibited`). La única forma de cambiarlo es
+`POST /api/admin/variants/{variant}/adjust-stock`, que exige un
+`quantity_change` con signo y un motivo, y escribe una fila `adjustment` en el
+kardex con el `created_by` del admin.
+
+**Alternativas consideradas:** aceptar `stock` en la edición de variante como
+un campo más (que es como lo enunciaba el plan) y emitir el movimiento por
+detrás, con un motivo genérico tipo "edición manual".
+
+**Razón:** `inventory_movements` existe para poder responder "¿por qué hay 7 y
+no 10?". Un campo de stock en un formulario no trae esa respuesta: trae un
+número. Aceptarlo obligaría a inventar un motivo, y un kardex lleno de
+"edición manual" no es un kardex, es un log de escrituras. Además el ajuste es
+relativo con signo (`+12 llegaron`, `-3 rotas`) mientras que un campo es
+absoluto, y un valor absoluto pisa en silencio una venta confirmada un segundo
+antes.
+
+**Implicaciones técnicas:**
+- `InventoryReservationService::adjust()` relee la fila con `lockForUpdate` en
+  vez de confiar en la instancia recibida, para que el delta se aplique al
+  stock como está ahora y no como lo vio el panel.
+- Se rechaza dejar `stock` por debajo de `reserved_quantity`: esas unidades ya
+  están prometidas a órdenes abiertas. Bajar hasta exactamente ese número sí se
+  permite.
+- `reserved_quantity` también está prohibido en la edición: lo maneja el ciclo
+  de vida de las órdenes, no el editor de catálogo.
+- Es el primer código que emite `InventoryMovementType::Adjustment`, que existía
+  en el enum desde la Fase 1 sin emisor.
+
+---
+
+### 2026-09-01 — Eliminar un producto es baja lógica, y restaurar lo devuelve entero
+
+**Decisión:** `DELETE /api/admin/products/{product}` archiva (soft delete) el
+producto y, en la misma transacción, sus variantes vivas.
+`POST /api/admin/products/{product}/restore` devuelve el producto y **todas**
+sus variantes archivadas, incluidas las que se habían retirado una por una
+antes de archivar el producto.
+
+**Alternativas consideradas:** (a) borrado real; (b) archivar el producto sin
+tocar las variantes; (c) sellar las variantes con el `deleted_at` del producto
+para restaurar solo las que se llevó ese archivado.
+
+**Razón:** el borrado real está descartado por `order_items.product_variant_id`
+— la tienda tiene que poder responder qué vendió en marzo mucho después de que
+el producto salga del catálogo. Dejar las variantes vivas tampoco sirve: la
+reserva de stock las resuelve por id, así que seguirían siendo pedibles con su
+producto ya archivado. Y (c) se probó y no funciona: `deleted_at` es una
+columna de precisión de segundos, así que una variante borrada en el mismo
+segundo que el producto es indistinguible de una que se llevó el archivado.
+Devolver todo es la regla que siempre se cumple, y es el lado seguro del error:
+volver a retirar una variante es un clic, mientras que una variante que falta
+en silencio es invisible.
+
+**Implicaciones técnicas:**
+- `Product::archive()` / `Product::unarchive()` llevan las dos operaciones; el
+  controlador solo decide si están permitidas.
+- Se rechaza archivar un producto con `reserved_quantity > 0` en cualquiera de
+  sus variantes: hay clientes en camino a pagar esas unidades.
+- La misma negativa protege el borrado de una variante suelta, más una segunda:
+  no se puede archivar la última variante viva de un producto, porque todo
+  producto debe tener al menos una (regla de la Fase 1). Para retirar el
+  producto entero está el archivado del producto.
+- `GET /products/{product}` y el restore resuelven con `withTrashed()`; el
+  listado esconde lo archivado salvo `?trashed=with|only`.
+- Las reglas `unique` de `slug` y `sku` cuentan las filas archivadas, igual que
+  el índice de la base: un slug libre solo a ojos de Eloquent sigue fallando en
+  el insert.
+
+---
+
+### 2026-09-01 — El generador es el único que escribe el conjunto de variantes
+
+**Decisión:** las variantes no se crean de a una con su combinación escrita a
+mano. `POST /api/admin/products/{product}/variants` recibe todas las
+combinaciones o una selección, y `VariantGenerator` decide qué crear. Crear un
+producto crea su variante implícita; generar combinaciones reales la archiva.
+Agregar una opción a un producto que ya tiene variantes con combinaciones se
+rechaza; agregar un valor a una opción existente siempre se permite.
+
+**Alternativas consideradas:** un `POST /variants` clásico donde el panel manda
+`option_value_ids`, y dejar que la validación se encargue.
+
+**Razón:** una variante no es una fila suelta, es un punto de la grilla que
+forman las opciones. Un endpoint que acepte cualquier conjunto de valores deja
+crear un punto que no está en la grilla — una variante sin talla en un producto
+con tallas — que el storefront no puede resolver a partir de lo que el cliente
+selecciona. Concentrarlo en el generador es lo que permite que la regla de la
+variante implícita ("todo producto tiene al menos una variante") sea una
+invariante y no una recomendación.
+
+**Implicaciones técnicas:**
+- Generar es idempotente: la combinación que ya existe se cuenta como omitida.
+  El `meta` de la respuesta dice `created` / `skipped` / `archived_implicit`,
+  que es lo que hace seguro volver a pulsar el botón después de agregar un
+  valor.
+- Agregar una opción se rechaza porque las variantes existentes quedarían
+  indefinidas en el eje nuevo (un "Rojo-M" que no dice nada de Material).
+  Eliminar una opción o un valor en uso se rechaza por lo contrario:
+  `variant_option_values` cascadea, así que la base no fallaría — dejaría dos
+  variantes idénticas donde antes había "Rojo" y "Azul".
+- Renombrar una opción o un valor siempre se permite: son etiquetas, y ninguna
+  identidad de variante depende de ellas.
+- El SKU se deriva del producto y de la combinación (`CAMISA-ROJO-M`) porque un
+  SKU se dicta en voz alta en un depósito; las colisiones se resuelven con
+  sufijo numérico, contando las variantes archivadas.
+- Hay un tope configurable (`commerce.catalog.max_variants_per_product`, 500)
+  para que un "generar todas" sobre cuatro opciones sea un 422 legible y no una
+  petición que se cae a la mitad.
+- Las variantes nacen con `stock = 0`: las unidades entran por un ajuste de
+  inventario, que es lo que escribe el kardex.
+
+---
+
+### 2026-09-01 — Imágenes de catálogo: disco público, no streaming como los comprobantes
+
+**Decisión:** las imágenes de producto viven en el disco `public`
+(configurable en `commerce.product_image`) y las sirve el servidor web a través
+del symlink de `storage:link`. No pasan por la API. La compresión que vivía
+dentro de `PaymentProofService` se extrajo a `ImageStorageService`, que ahora
+usan los dos.
+
+**Alternativas consideradas:** servirlas con streaming autenticado, como los
+comprobantes de pago (decisión del 2026-09-01 más arriba).
+
+**Razón:** son cosas opuestas. Un comprobante es el recibo bancario de un
+cliente y solo debe verlo un admin con sesión; una foto de producto está para
+que la vea cualquiera que entre a la tienda, y hacerla pasar por PHP en cada
+carga de la portada es gasto puro. Lo que sí comparten es cómo llega el
+archivo: una foto sacada con un teléfono, que hay que reencodear, reducir y
+guardar con un nombre que no eligió quien la subió.
+
+**Implicaciones técnicas:**
+- `ImageStorageService` es el único que escribe un archivo subido. Reencodea a
+  JPEG y reduce con `scaleDown` (que nunca amplía), y deja intacto lo que no es
+  imagen — un comprobante en PDF se destruiría si se reencodeara.
+- El nombre guardado siempre es un UUID: el nombre original es texto controlado
+  por quien sube, y conservarlo filtra cómo llamó el cliente al archivo.
+- Las imágenes se asocian al **valor de opción**, no a la variante (PRD): las
+  fotos de "Rojo" las heredan Rojo-38, Rojo-39 y Rojo-40 sin duplicarlas. Si el
+  producto no tiene una opción visual, quedan colgadas del producto.
+- Un producto tiene exactamente una imagen principal: la primera que se sube lo
+  es, marcar otra se la quita a la anterior, y borrar la principal se la pasa a
+  la siguiente. El storefront ordena por `is_primary` y luego por `position`.
+- `ProductImageResource` toma el disco de la config y no de un literal, para
+  que un despliegue pueda mover el catálogo a S3 sin tocar código.

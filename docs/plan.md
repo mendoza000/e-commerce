@@ -238,6 +238,67 @@ Frontend:
 
 ---
 
+### Fase 5c — Catálogo, variantes e inventario
+
+**Objetivo:** el admin puede cargar y mantener el catálogo sin seeders ni SQL.
+
+Backend:
+
+- [x] CRUD de categorías — con `slug` derivado del nombre, guardia contra ciclos en `parent_id` y negativa a eliminar una categoría con productos o subcategorías (ambas FK son `nullOnDelete`: la base la aceptaría descategorizando todo en silencio)
+- [x] CRUD de productos, con generación y validación de `slug` único — "eliminar" es **baja lógica** y arrastra a las variantes vivas; restaurar las devuelve todas. Ver `docs/decisions.md`
+- [x] CRUD de opciones de producto y sus valores ("Color", "Talla" y sus valores posibles) — agregar una opción se rechaza si ya hay variantes con combinaciones; agregar un valor siempre se permite
+- [x] Generador de variantes a partir de las combinaciones de valores de opción (todas o una selección), respetando la regla de variante implícita definida en la Fase 1 — `VariantGenerator`, idempotente: la combinación que ya existe se cuenta como omitida
+- [x] Edición individual de variante: SKU, `price_override`, activa/inactiva — **el stock no**: cambiarlo exige motivo y pasa por el endpoint de ajuste, ver `docs/decisions.md`
+- [x] **Nuevo método `InventoryReservationService::adjust()`**: toma `lockForUpdate` releyendo la fila, exige motivo y rechaza dejar `stock` por debajo de `reserved_quantity`
+- [x] Endpoint de ajuste manual de stock por variante (reposición, corrección de conteo físico, baja por daño/pérdida) con motivo obligatorio y `created_by`
+- [x] Endpoint de historial de movimientos de inventario por variante (kardex), paginado y filtrable por tipo
+- [x] **Pipeline de imágenes de producto**: disco `public` configurable (`commerce.product_image`), `storage:link` documentado en el README, y la compresión extraída de `PaymentProofService` a `ImageStorageService`, que ahora usan los dos
+- [x] Endpoints de subida, borrado, reordenamiento e imagen principal, asociadas a un `product_option_value_id` o al producto general
+- [x] Tests: 135 casos nuevos — 89 de feature (`ProductManagementTest` 19, `InventoryTest` 15, `ProductImageManagementTest` 15, `VariantManagementTest` 14, `ProductOptionManagementTest` 14, `CategoryManagementTest` 12) y 46 unitarios (`VariantGeneratorTest` 18, `ProductCatalogTest` 15, `InventoryAdjustmentTest` 7, `ImageStorageServiceTest` 6). Cubren el generador, el ajuste con reserva viva, el kardex, las validaciones de archivo y el rebote de `staff` con 403 en cada endpoint de escritura. Suite completa: 471 casos en verde
+
+Frontend:
+
+- [ ] CRUD de productos y categorías desde el panel
+- [ ] CRUD de opciones de producto y sus valores
+- [ ] UI del generador de variantes (elegir qué combinaciones crear antes de generarlas)
+- [ ] Edición individual de variante: SKU, precio (override opcional), stock
+- [ ] Formulario de ajuste manual de stock con motivo
+- [ ] Vista de historial de movimientos de inventario por variante (kardex)
+- [ ] Subida de imágenes asociadas a un valor de opción específico (ej. fotos del color "Rojo") o al producto general si no aplica opción visual, con previsualización
+
+**Entregable de sub-fase:** un producto con opciones, variantes, imágenes y stock se crea de punta a punta desde el panel y aparece correctamente en el storefront.
+
+### Decisiones tomadas durante la Fase 5c (backend)
+
+- **El stock no es un campo editable.** La edición de variante acepta SKU,
+  `price_override` y activa/inactiva, y rechaza `stock` con un 422 explícito.
+  Toda unidad que se mueve deja una fila en el kardex, y eso exige motivo: el
+  único camino es `POST /variants/{variant}/adjust-stock`. Ver
+  `docs/decisions.md`.
+- **"Eliminar" un producto es baja lógica** y arrastra a sus variantes vivas.
+  Restaurarlo las devuelve **todas**, incluidas las que se habían retirado una
+  por una: `deleted_at` tiene precisión de segundos, así que no hay forma
+  fiable de distinguirlas. Ver `docs/decisions.md`.
+- **El generador es el único que escribe el conjunto de variantes.** Crear un
+  producto crea su variante implícita; generar combinaciones reales la archiva.
+  Agregar una opción a un producto que ya tiene variantes con combinaciones se
+  rechaza (esas variantes quedarían indefinidas en el eje nuevo); agregar un
+  valor a una opción existente siempre se permite.
+- **Las imágenes se cuelgan del valor de opción, no de la variante** (como pide
+  el PRD): las fotos de "Rojo" las heredan Rojo-38, Rojo-39 y Rojo-40 sin
+  duplicarlas. `ImageStorageService` es ahora el único que sabe escribir un
+  archivo subido, y lo comparten comprobantes e imágenes de catálogo.
+- **Hueco conocido, no cerrado en esta sub-fase:**
+  `InventoryReservationService::lockVariantsForOrder()` valida
+  `product_variants.is_active` pero no mira `products.is_active`. Archivar el
+  producto sí cierra la puerta (la baja lógica arrastra a las variantes, y la
+  consulta las excluye), pero **despublicar** no: las variantes de un producto
+  con `is_active = false` siguen siendo reservables por id, aunque el
+  storefront ya no las ofrezca. Cerrarlo toca una ruta de la Fase 4 con tests
+  propios y merece su propia decisión.
+
+---
+
 ## Fase 6 — Fulfillment (envío) y cierre del ciclo de orden
 
 **Objetivo:** completar el ciclo de vida de la orden con la lógica de envío.

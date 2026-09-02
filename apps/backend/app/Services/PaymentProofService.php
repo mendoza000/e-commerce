@@ -10,12 +10,11 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
-use Intervention\Image\Drivers\Gd\Driver;
-use Intervention\Image\ImageManager;
 
 class PaymentProofService
 {
+    public function __construct(private readonly ImageStorageService $images) {}
+
     /**
      * Stores an uploaded proof, moves the order to payment_submitted and warns
      * the admins.
@@ -52,26 +51,22 @@ class PaymentProofService
 
     /**
      * Images are re-encoded and downscaled — a 12MP phone photo of a bank
-     * receipt is unreadable clutter at full size. PDFs are stored as-is.
+     * receipt is unreadable clutter at full size. PDFs are stored as-is. Both
+     * rules live in ImageStorageService, which the product catalogue shares;
+     * what stays here is the one thing specific to proofs: they are filed under
+     * the order they belong to.
      */
     private function putFile(Order $order, UploadedFile $file, string $disk): string
     {
         $directory = trim((string) config('commerce.payment_proof.directory'), '/').'/'.$order->order_number;
 
-        if (! Str::startsWith($file->getMimeType() ?: '', 'image/')) {
-            return $file->store($directory, ['disk' => $disk]);
-        }
-
-        $image = (new ImageManager(new Driver))->read($file->getRealPath())
-            ->scaleDown(width: (int) config('commerce.payment_proof.image_max_width'));
-
-        $encoded = $image->toJpeg(quality: (int) config('commerce.payment_proof.image_quality'));
-
-        $path = $directory.'/'.Str::uuid()->toString().'.jpg';
-
-        Storage::disk($disk)->put($path, (string) $encoded);
-
-        return $path;
+        return $this->images->store(
+            $file,
+            $disk,
+            $directory,
+            (int) config('commerce.payment_proof.image_max_width'),
+            (int) config('commerce.payment_proof.image_quality'),
+        );
     }
 
     /**

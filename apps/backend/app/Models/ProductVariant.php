@@ -28,6 +28,7 @@ class ProductVariant extends Model
         return [
             'price_override' => 'decimal:6',
             'reserved_until' => 'datetime',
+            'is_active' => 'boolean',
         ];
     }
 
@@ -55,5 +56,35 @@ class ProductVariant extends Model
     public function effectivePrice(): string
     {
         return (string) ($this->price_override ?? $this->product->base_price);
+    }
+
+    /**
+     * What a new order could still take. Clamped at zero because an
+     * out-of-band correction can leave `reserved_quantity` above `stock`, and
+     * a negative "available" would read as a discount to every caller.
+     */
+    public function availableStock(): int
+    {
+        return max(0, $this->stock - $this->reserved_quantity);
+    }
+
+    /**
+     * Whether an open order is holding units of this variant right now.
+     * Archiving it, or archiving its product, would pull stock out from under
+     * a customer who is on their way to pay.
+     */
+    public function hasLiveReservations(): bool
+    {
+        return $this->reserved_quantity > 0;
+    }
+
+    /**
+     * The variant "without options" that every product has when no options are
+     * configured — the implicit variant of the Fase 1 rule, which is the
+     * product itself wearing a SKU.
+     */
+    public function isImplicit(): bool
+    {
+        return $this->optionValues()->doesntExist();
     }
 }

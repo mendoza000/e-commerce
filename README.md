@@ -51,6 +51,14 @@ Correr las migraciones (contra el Postgres de Docker, ya expuesto en
 php artisan migrate --seed
 ```
 
+Crear el symlink de almacenamiento público, que es por donde el servidor web
+sirve las imágenes de producto (los comprobantes de pago viven aparte, en un
+disco privado que nunca se expone):
+
+```bash
+php artisan storage:link
+```
+
 Probar: `http://api.tienda.test/api/health` debe responder
 `{"status":"ok","db":"connected"}`.
 
