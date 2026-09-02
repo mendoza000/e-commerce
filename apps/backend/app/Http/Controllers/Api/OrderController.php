@@ -9,6 +9,7 @@ use App\Models\Order;
 use App\Services\OrderService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class OrderController extends Controller
 {
@@ -34,5 +35,22 @@ class OrderController extends Controller
         ]);
 
         return OrderResource::make($order);
+    }
+
+    /**
+     * "Mis pedidos" (PRD section 5): the order history of the authenticated
+     * customer. Guarded by the `auth:customer` route middleware, unlike show()
+     * above — there is no document-number fallback here because there is no
+     * order in the URL to prove ownership of; the token is the only key.
+     */
+    public function mine(Request $request): AnonymousResourceCollection
+    {
+        $orders = $request->user('customer')->orders()
+            ->with(['items', 'baseCurrency', 'paymentCurrency', 'paymentMethod', 'fulfillmentMethod'])
+            ->orderByDesc('id')
+            ->paginate($request->integer('per_page', 20))
+            ->withQueryString();
+
+        return OrderResource::collection($orders);
     }
 }
