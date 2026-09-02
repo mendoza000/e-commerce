@@ -363,3 +363,90 @@ configuración de tasas.
   `auth:sanctum` resuelve por un `RequestGuard` que cachea el usuario y no se
   limpia al cerrar sesión del guard `web`. Con php-fpm el proceso muere antes
   de que importe; con un worker de larga vida sería identidad obsoleta.
+
+---
+
+### 2026-09-01 — Comprobantes: streaming autenticado, no URL firmada
+
+**Decisión:** el panel lee los comprobantes por `GET /api/admin/payment-proofs/{proof}`,
+que transmite el archivo desde el disco privado dentro de la sesión del admin.
+No se emiten URLs firmadas temporales.
+
+**Alternativas consideradas:** `Storage::temporaryUrl()` — el disco `local` de
+este proyecto tiene `serve => true`, así que la soporta, y en S3 saldría gratis.
+
+**Razón:** un comprobante es el recibo bancario de un cliente. Una URL firmada
+es una credencial al portador: funciona para cualquiera que la tenga, sigue
+funcionando después de que la sesión que la pidió se cerró, y queda escrita en
+el historial del navegador y en los logs de cualquier proxy intermedio. El
+streaming deja la sesión del admin como única llave, y se comporta igual sea
+cual sea el disco que use el despliegue.
+
+**Implicaciones técnicas:**
+- La ruta no está anidada bajo la orden: cualquier admin puede ver cualquier
+  orden, así que la orden en el path sería decoración que el endpoint tendría
+  que volver a verificar.
+- Se sirve `inline` con el `mime_type` guardado, para que el panel muestre la
+  imagen o el PDF en su sitio en vez de obligar a descargarlo. Como el frontend
+  vive en `tienda.test` y la API en `api.tienda.test` — mismo dominio padre —
+  la cookie de sesión viaja también en un `<img src="...">`.
+- Una fila cuyo archivo ya no está en disco responde 404, no un stream vacío.
+
+---
+
+### 2026-09-01 — Cancelar devuelve stock, con un movimiento propio en el kardex
+
+**Decisión:** `Order::cancel(User $admin, string $reason)` decide según el
+estado: si la orden todavía no estaba pagada libera la reserva (`Release`), y si
+ya lo estaba reingresa las unidades a `stock` con un tipo de movimiento nuevo,
+`InventoryMovementType::Restock`.
+
+**Alternativas consideradas:** reusar `Release` para ambos casos, o reusar
+`Adjustment`.
+
+**Razón:** los tres movimientos son cosas distintas y el kardex existe
+justamente para poder distinguirlas después. `Release` solo suelta una reserva
+y nunca toca `stock`; usarlo para un reingreso volvería ambiguo cada renglón del
+histórico. `Adjustment` es la corrección manual de un conteo físico, que la Fase
+5c va a introducir con motivo obligatorio: mezclarla con las cancelaciones haría
+que ese reporte mintiera. La columna `inventory_movements.type` es `string`, así
+que el caso nuevo no costó migración.
+
+**Implicaciones técnicas:**
+- `InventoryReservationService::release()` y el nuevo `restock()` reciben un
+  `?User $admin`, para que el kardex registre quién canceló. Sigue siendo `null`
+  cuando el que libera es el barrido programado: ahí no lo decidió nadie, lo
+  decidió el vencimiento.
+- Cancelar una orden `shipped` o `delivered` lo rechaza la máquina de estados
+  (422 `invalid_order_transition`): la mercancía ya salió, y reingresarla es una
+  decisión de almacén, no un clic.
+- `cancel()` es idempotente y toma el row lock de la orden, igual que
+  `confirmPayment()`: dos paneles cancelando a la vez liberan una sola vez.
+
+---
+
+### 2026-09-01 — Un endpoint por acción de orden, no un "cambiar estado" genérico
+
+**Decisión:** el panel tiene `confirm-payment`, `reject-payment` y `cancel` como
+endpoints propios, y un `transition` genérico que solo acepta `preparing`,
+`shipped` y `delivered`.
+
+**Alternativas consideradas:** un único `PATCH /orders/{order}` con el estado
+destino, apoyado en `OrderStatus::allowedTransitions()` para validar.
+
+**Razón:** las transiciones no son equivalentes entre sí. Pasar a `paid`
+descuenta stock, volver a `pending_payment` reabre la ventana de reserva, y
+cancelar libera o reingresa unidades. Un endpoint genérico que las aceptara
+sería una puerta trasera para ejecutar el cambio de estado sin su efecto
+colateral. Las tres que no mueven nada más que la orden sí comparten endpoint.
+
+**Implicaciones técnicas:**
+- `OrderStatus::fulfillmentStatuses()` es la única fuente de esa lista: la usan
+  la validación del request y el bloque `actions` del recurso.
+- El recurso de orden expone `actions` (`can_confirm_payment`,
+  `can_reject_payment`, `can_cancel` y `available_transitions`) derivado de la
+  máquina de estados, para que el panel dibuje solo los botones que funcionan.
+  Es una pista de UI, como `permissions` en `UserResource`: la autoridad sigue
+  siendo el backend, que responde 422 igual.
+- Las órdenes quedan fuera del grupo `role:owner`: `staff` es un rol de
+  operación de pedidos y ejecuta las cuatro acciones.

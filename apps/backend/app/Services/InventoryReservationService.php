@@ -157,7 +157,7 @@ class InventoryReservationService
      * reservation expired) and records one Release movement per line.
      * Follows the same ascending-lock discipline as lockVariantsForOrder.
      */
-    public function release(Order $order, string $reason): void
+    public function release(Order $order, string $reason, ?User $admin = null): void
     {
         $items = $order->items()->orderBy('product_variant_id')->get();
 
@@ -189,7 +189,50 @@ class InventoryReservationService
                 'quantity_change' => $item->quantity,
                 'reason' => $reason,
                 'order_id' => $order->id,
-                'created_by' => null,
+                // Null when the expiry sweeper is the one releasing: nobody
+                // decided it, the deadline did.
+                'created_by' => $admin?->id,
+            ]);
+        }
+    }
+
+    /**
+     * Puts back on the shelf the units an order had already taken out of
+     * `stock`, because a sale that was committed is being cancelled. The
+     * mirror image of commit(): `stock` goes back up and no reservation is
+     * involved, since confirmPayment cleared it when it committed.
+     *
+     * Must be called inside an already-open transaction, from Order::cancel,
+     * which holds the order's row lock. Follows the same ascending-lock
+     * discipline as lockVariantsForOrder.
+     */
+    public function restock(Order $order, string $reason, ?User $admin = null): void
+    {
+        $items = $order->items()->orderBy('product_variant_id')->get();
+
+        $variants = $this->lockVariantsOf($items);
+
+        if ($variants === null) {
+            return;
+        }
+
+        foreach ($items as $item) {
+            $variant = $variants->get($item->product_variant_id);
+
+            if ($variant === null) {
+                continue;
+            }
+
+            $variant->increment('stock', (int) $item->quantity);
+
+            InventoryMovement::create([
+                'product_variant_id' => $variant->id,
+                'sku' => $item->sku,
+                'type' => InventoryMovementType::Restock,
+                'quantity_change' => $item->quantity,
+                'reason' => $reason,
+                'order_id' => $order->id,
+                'created_by' => $admin?->id,
             ]);
         }
     }

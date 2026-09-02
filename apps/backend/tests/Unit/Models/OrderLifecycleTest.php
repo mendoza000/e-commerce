@@ -219,4 +219,37 @@ class OrderLifecycleTest extends TestCase
         $this->assertFalse($order->isAccessibleBy(null, '87654321'));
         $this->assertFalse($order->isAccessibleBy(null, null));
     }
+
+    public function test_advancing_a_paid_order_records_who_moved_it(): void
+    {
+        $admin = User::factory()->create();
+        $order = $this->reservedOrder();
+        $order->markPaymentSubmitted();
+        $order->confirmPayment($admin);
+
+        $order->advanceTo(OrderStatus::Preparing, $admin, 'Empacada.');
+
+        $entry = $order->statusHistory()->latest('id')->firstOrFail();
+
+        $this->assertSame(OrderStatus::Preparing, $order->fresh()->status);
+        $this->assertSame('preparing', $entry->to_status);
+        $this->assertSame($admin->id, $entry->changed_by);
+        $this->assertSame('Empacada.', $entry->reason);
+    }
+
+    public function test_advancing_to_the_status_it_already_has_is_a_no_op(): void
+    {
+        $admin = User::factory()->create();
+        $order = $this->reservedOrder();
+        $order->markPaymentSubmitted();
+        $order->confirmPayment($admin);
+
+        $order->advanceTo(OrderStatus::Preparing, $admin);
+        $order->advanceTo(OrderStatus::Preparing, $admin);
+
+        $this->assertSame(
+            1,
+            $order->statusHistory()->where('to_status', 'preparing')->count()
+        );
+    }
 }

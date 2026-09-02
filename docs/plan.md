@@ -190,6 +190,54 @@ Frontend:
 
 ---
 
+### Fase 5b — Gestión de órdenes
+
+**Objetivo:** cerrar el ciclo operativo que la Fase 4 dejó a medias — el admin puede cobrar y despachar.
+
+Backend:
+
+- [x] Endpoint `GET /api/admin/orders` (listado con filtro por estado, búsqueda por número de orden/cliente, paginación) — la búsqueda cubre también documento y teléfono, y escapa los comodines de `ILIKE`
+- [x] Endpoint `GET /api/admin/orders/{order}` (detalle: cliente, items, tasa aplicada, historial de estados, comprobantes) — enlazado por `order_number` como en el storefront; el id numérico sigue sin salir de la base
+- [x] Endpoint de descarga del comprobante: se eligió **streaming autenticado** (`GET /api/admin/payment-proofs/{proof}`) en vez de URL firmada temporal. Ver `docs/decisions.md`
+- [x] Endpoint `POST /api/admin/orders/{order}/confirm-payment` (envuelve `Order::confirmPayment()`, ya implementado y testeado en Fase 4)
+- [x] Endpoint `POST /api/admin/orders/{order}/reject-payment` con motivo obligatorio (envuelve `Order::rejectPayment()`)
+- [x] Endpoint de transición `POST /api/admin/orders/{order}/transition` para marcar en preparación / enviado / entregado, apoyado en `OrderStatus::allowedTransitions()`; acepta solo esos tres estados, ver `docs/decisions.md`
+- [x] **Nuevo método de dominio `Order::cancel(User $admin, string $reason)`**: libera la reserva si la orden todavía no estaba pagada, y reingresa el stock si ya lo estaba, registrando el movimiento correspondiente en `inventory_movements`. El reingreso usa un tipo de movimiento nuevo, `InventoryMovementType::Restock`, ver `docs/decisions.md`
+- [x] Verificar que todas las acciones nuevas pasen por `Order::transitionTo()`, que ya escribe `order_status_history` sola, y que registren `changed_by` — las cuatro son métodos de `Order` que toman el row lock de la orden y reciben el admin que actuó
+- [x] Tests: 54 casos nuevos — 37 de feature (`OrderActionsTest` 16, `OrderListTest` 14, `PaymentProofDownloadTest` 7) y 17 unitarios, de los cuales 12 en `OrderCancellationTest` recorren la cancelación desde cada estado verificando stock y kardex. `staff` ejecuta las acciones en los tests, no solo `owner`
+
+Frontend:
+
+- [ ] Listado de órdenes con filtros por estado
+- [ ] Vista de detalle de orden: datos del cliente, items, comprobante visualizable, historial de estados, tasa de cambio aplicada
+- [ ] Acciones de confirmar pago / rechazar pago (con motivo) y de avance de estado, mostrando solo las transiciones válidas para el estado actual
+- [ ] Confirmación explícita en las acciones difíciles de revertir (confirmar pago, cancelar)
+
+**Entregable de sub-fase:** una orden creada desde el storefront se cobra, se prepara y se despacha desde el panel, con inventario y kardex correctos en cada camino — incluido el de cancelación.
+
+### Decisiones tomadas durante la Fase 5b (backend)
+
+- El comprobante se sirve por **streaming autenticado** (`GET /api/admin/payment-proofs/{proof}`),
+  no por URL firmada temporal: una URL firmada es una credencial al portador que
+  sigue funcionando fuera de la sesión que la pidió y queda escrita en el
+  historial del navegador. Ver `docs/decisions.md`.
+- El endpoint genérico de transición acepta **solo** `preparing`, `shipped` y
+  `delivered`. Cobrar, devolver a `pending_payment` y cancelar mueven stock, y
+  cada uno tiene su endpoint: aceptarlos aquí sería saltarse ese efecto.
+- Cancelar una orden ya pagada reingresa el stock con un tipo de movimiento
+  nuevo, `InventoryMovementType::Restock`, distinto de `Release` (que solo
+  suelta una reserva, sin tocar `stock`) y de `Adjustment` (que la Fase 5c
+  reserva para correcciones manuales de conteo).
+- **Hueco detectado, no resuelto en esta sub-fase:** una orden con un método de
+  pago que no pide comprobante (`EfectivoContraEntrega`, `requiresProof() ===
+  false`) se queda en `pending_payment` para siempre: la máquina de estados no
+  permite `pending_payment → paid`, así que el panel no puede cobrarla. Cerrarlo
+  implica cambiar un invariante de la Fase 1 (`OrderStatus::allowedTransitions`,
+  con un test que lo fija) y decidir cuándo se considera pagada una venta contra
+  entrega — antes o al momento de entregar. Queda como decisión de producto.
+
+---
+
 ## Fase 6 — Fulfillment (envío) y cierre del ciclo de orden
 
 **Objetivo:** completar el ciclo de vida de la orden con la lógica de envío.

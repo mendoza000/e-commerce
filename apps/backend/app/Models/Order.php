@@ -252,6 +252,78 @@ class Order extends Model
     }
 
     /**
+     * Moves an already-paid order along its way to the customer (preparing →
+     * shipped → delivered). Takes the same row lock as the money-handling
+     * actions, so two admins clicking at once cannot both write a history
+     * entry for the same move.
+     *
+     * @throws InvalidOrderTransition
+     */
+    public function advanceTo(OrderStatus $target, User $admin, ?string $reason = null): void
+    {
+        DB::transaction(function () use ($target, $admin, $reason) {
+            $this->lockAndRefresh();
+
+            if ($this->status === $target) {
+                return;
+            }
+
+            $this->transitionTo($target, $admin, $reason);
+        });
+    }
+
+    /**
+     * Cancels an order at an admin's request, undoing whatever hold it still
+     * has on inventory — which depends on how far it got:
+     *
+     *  - not yet paid: the reservation is released and `stock` is left alone,
+     *    because it was never touched;
+     *  - already paid: confirmPayment took the units out of `stock` for good,
+     *    so they go back on the shelf.
+     *
+     * Skipping either would leak inventory. A manual cancellation is invisible
+     * to the expiry sweeper — it only looks at orders that still hold a
+     * reservation — so units nobody released would stay locked away forever.
+     *
+     * Cancelling a shipped or delivered order is refused by the state machine:
+     * the goods are already out the door, and putting them back is a warehouse
+     * decision rather than a click.
+     *
+     * @throws InvalidOrderTransition
+     */
+    public function cancel(User $admin, string $reason): void
+    {
+        DB::transaction(function () use ($admin, $reason) {
+            $this->lockAndRefresh();
+
+            // Whoever got here second has nothing left to do.
+            if ($this->status === OrderStatus::Cancelled) {
+                return;
+            }
+
+            // Checked up front so the inventory work below never runs for a
+            // move that is going to be rejected anyway. transitionTo would
+            // catch it too, one rollback later.
+            if (! $this->status->canTransitionTo(OrderStatus::Cancelled)) {
+                throw new InvalidOrderTransition($this->status, OrderStatus::Cancelled);
+            }
+
+            $inventory = app(InventoryReservationService::class);
+
+            if ($this->status->holdsReservation()) {
+                $inventory->release($this, $reason, $admin);
+            } elseif ($this->status->hasCommittedStock()) {
+                $inventory->restock($this, $reason, $admin);
+            }
+
+            $this->transitionTo(OrderStatus::Cancelled, $admin, $reason);
+
+            // Terminal state: there is no reservation left to expire.
+            $this->update(['reservation_expires_at' => null]);
+        });
+    }
+
+    /**
      * Releases the held stock and cancels the order. Returns false when there
      * was nothing to do, so an overlapping scheduler run is a no-op rather than
      * a double release.
