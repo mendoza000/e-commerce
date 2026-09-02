@@ -41,4 +41,26 @@ enum PaymentMethodType: string
             self::EfectivoContraEntrega => 'Efectivo contra entrega',
         };
     }
+
+    /**
+     * The account fields this method's `instructions` JSON is expected to
+     * carry — a phone for Pago Móvil, an email for Zelle, and so on.
+     *
+     * One list, read from two directions: ManualPaymentProvider builds the
+     * customer-facing account block from it, and the admin API both validates
+     * against it and hands it to the panel so the form can draw the right
+     * fields per type. Keeping the two in sync by construction is why the list
+     * lives here and not inside each provider.
+     *
+     * @return array<int, string>
+     */
+    public function instructionFields(): array
+    {
+        return match ($this) {
+            self::PagoMovil => ['bank', 'bank_code', 'phone', 'document_number'],
+            self::Zelle => ['email', 'holder_name'],
+            self::TransferenciaNacional => ['bank', 'account_number', 'account_type', 'holder_name', 'document_number'],
+            self::EfectivoContraEntrega => ['contact_phone'],
+        };
+    }
 }

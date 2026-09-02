@@ -603,3 +603,104 @@ guardar con un nombre que no eligió quien la subió.
   la siguiente. El storefront ordena por `is_primary` y luego por `position`.
 - `ProductImageResource` toma el disco de la config y no de un literal, para
   que un despliegue pueda mover el catálogo a S3 sin tocar código.
+
+---
+
+### 2026-09-01 — El historial de tasas es de solo agregar
+
+**Decisión:** sobre `exchange_rates` el panel solo tiene `GET` y `POST`. No
+existe endpoint de edición ni de borrado, y registrar una tasa nueva
+(`ExchangeRateService::storeManual()`) siempre inserta una fila, nunca
+actualiza la anterior.
+
+**Alternativas consideradas:** un `PUT` por par que mantuviera "la tasa
+vigente" en una sola fila, con el historial como efecto secundario opcional.
+
+**Razón:** `orders.exchange_rate_applied` guarda la tasa con la que se le
+cobró a un cliente, y `exchange_rates` es el registro contra el que ese número
+se justifica. Si una fila del historial se puede reescribir, una orden que era
+correcta cuando se creó pasa a parecer equivocada, y no queda forma de
+demostrar cuál era la tasa aquel martes. Corregir una tasa mal puesta es
+registrar la buena ahora: `latestRate()` ordena por `effective_at`, así que la
+nueva entra en vigor sola.
+
+**Implicaciones técnicas:**
+- `storeManual()` es la imagen especular de `refresh()`: la manual escribe el
+  `created_by` del admin y `source = manual`; la automática deja `created_by`
+  en `null` a propósito, porque ahí no lo decidió nadie, lo reportó una fuente.
+  El historial distingue las dos con solo mirar esas dos columnas.
+- Borrar la configuración de un par (`exchange_rate_settings`) detiene la
+  automatización pero no toca las tasas ya registradas: siguen en el historial
+  y siguen justificando las órdenes que las usaron.
+- El par de un `exchange_rate_setting` tampoco se edita. Su historial de
+  refresco (`last_run_at`, `last_error_at`, `last_error`) describe el par para
+  el que corrió; apuntar la fila a otras monedas lo convertiría en una mentira.
+- Un par en modo automático exige un provider automático: apuntarlo a `manual`
+  crearía un horario sin nada que llamar, y `refresh()` lo saltaría en silencio
+  mientras el par se ve configurado.
+
+---
+
+### 2026-09-01 — El storefront lee la identidad de la tienda de la API
+
+**Decisión:** existe `GET /api/store`, público y sin sesión, con nombre, logo,
+colores, número de WhatsApp y moneda base. Cierra la pregunta que la Fase 5d
+dejaba abierta sobre si el theming seguía siendo estático.
+
+**Alternativas consideradas:** mantener el theming de la Fase 2 — colores y
+nombre compilados en el frontend, cambiados por despliegue.
+
+**Razón:** era razonable mientras nada podía cambiarlos. Ahora el panel puede,
+y un frontend estático quedaría viejo en el momento en que un dueño renombra la
+tienda o sube un logo. Además la Fase 7 trata justamente de configurar una
+instancia nueva sin tocar código: si el nombre y el logo siguen siendo un
+`build`, ese flujo no existe.
+
+**Implicaciones técnicas:**
+- Es deliberadamente más estrecho que el recurso de admin: sin ids de monedas
+  habilitadas, sin salud de tasas, sin timestamps. Todo lo que devuelve ya está
+  impreso en la página.
+- Las tasas y las monedas habilitadas siguen viniendo de `GET /api/currencies`,
+  que ya existía y ya resuelve la tasa de cada una.
+- El logo se sirve por el disco público (symlink de `storage:link`), igual que
+  las imágenes de catálogo y por la misma razón: es algo que debe ver
+  cualquiera que entre a la tienda.
+
+---
+
+### 2026-09-01 — Los campos de cuenta de cada método de pago se declaran una vez
+
+**Decisión:** `PaymentMethodType::instructionFields()` es la única lista de qué
+datos de cuenta tiene cada método. La leen el provider (para armar lo que ve el
+cliente), el request de admin (para validar lo que se guarda) y el panel (para
+dibujar el formulario, vía `GET /api/admin/payment-method-types`). Además, el
+tipo de un método de pago no se puede cambiar, y un método con órdenes no se
+elimina: se desactiva.
+
+**Alternativas consideradas:** dejar `instructions` como un JSON totalmente
+libre y validar solo que sean strings; o declarar la lista de campos en el
+request de admin, aparte de la que ya tenía cada provider.
+
+**Razón:** un JSON libre deja guardar `bank_code` en un Zelle, que se
+almacenaría y no se le mostraría nunca a nadie — un dato de cuenta que el admin
+cree publicado y no lo está. Y declarar la lista dos veces garantiza que se
+separen: el formulario pediría un campo que el provider no lee. Al subirla al
+enum, los cuatro providers dejaron de repetirla y `accountDetails()` pasó a ser
+concreto en `ManualPaymentProvider`.
+
+**Implicaciones técnicas:**
+- `notes` se acepta además de los campos del tipo, porque
+  `ManualPaymentProvider::getInstructions()` lo pasa al cliente para todos.
+- Editar `instructions` reemplaza el blob entero, no lo mezcla: con un merge,
+  un campo vaciado sería indistinguible de uno ausente, y borrar un número de
+  cuenta viejo tiene que ser posible.
+- El tipo es inmutable porque decide el provider, los campos de cuenta y si el
+  método pide comprobante. Cambiarlo reinterpretaría el JSON guardado como los
+  campos de otro método, y las órdenes ya pagadas con él describirían una
+  cuenta que nunca se publicó.
+- `orders.payment_method_id` es `nullOnDelete`: borrar un método usado no
+  fallaría, borraría en silencio cómo se pagaron esas órdenes. Es la misma
+  razón por la que las cuentas de admin se desactivan y no se borran.
+- La coherencia entre monedas y métodos se valida por los dos lados: no se
+  deshabilita una moneda que cobra un método activo, ni se crea un método que
+  cobre en una moneda deshabilitada.

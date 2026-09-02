@@ -271,6 +271,15 @@ Historial de tasas de cambio aplicadas.
 - Tabla append-only: nunca se actualiza una fila existente, siempre se
   inserta una nueva tasa con su propio `effective_at`. El historial completo
   queda disponible para auditoría.
+- El panel lo respeta a nivel de API: sobre `exchange_rates` solo existen `GET`
+  y `POST`. Corregir una tasa equivocada es registrar la buena ahora, porque
+  `orders.exchange_rate_applied` se justifica contra este historial y reescribir
+  una fila haría que una orden correcta pareciera equivocada. Ver
+  `docs/decisions.md`.
+- `created_by` distingue quién produjo el número: con valor para la tasa que un
+  admin escribió a mano (`ExchangeRateService::storeManual()`, `source` =
+  `manual`), y en `null` para la que reportó una fuente automática
+  (`ExchangeRateService::refresh()`), donde no lo decidió nadie.
 
 ### exchange_rate_settings
 
@@ -287,9 +296,26 @@ automática, proveedor, frecuencia de actualización).
 | frequency_minutes | unsignedInteger | sí | null | — |
 | reference_amount | decimal(18,6) | sí | null | — |
 | is_active | boolean | no | true | — |
+| last_run_at | timestamp | sí | null | — |
+| last_error_at | timestamp | sí | null | — |
+| last_error | text | sí | null | — |
 | created_at / updated_at | timestamp | sí | — | — |
 
 **Índices/constraints:** único compuesto `(from_currency_id, to_currency_id)` — una única configuración activa por par de monedas.
+
+**Reglas de negocio:**
+- Las tres columnas de seguimiento existen porque un refresco fallido no
+  escribe nada en `exchange_rates`: sin ellas, una fuente rota es invisible
+  hasta que la tasa está muy vieja (PRD 8bis). `last_run_at` avanza en los dos
+  desenlaces, para que una fuente que falla no se reintente en cada tick.
+- El par (`from_currency_id`, `to_currency_id`) no se edita: el historial de
+  refresco describe el par para el que corrió. Se elimina la configuración y se
+  crea la otra.
+- Un par en modo `automatic` exige un `provider` automático. Apuntarlo a
+  `manual` sería un horario sin nada que llamar: `refresh()` lo saltaría en
+  silencio y el par se vería configurado sin actualizarse nunca.
+- Eliminar una configuración detiene la automatización pero no toca las tasas
+  ya registradas para ese par.
 
 ## 4. Ubicación geográfica
 
@@ -472,6 +498,22 @@ instalación del backend).
 | whatsapp_number | string(20) | sí | null | — |
 | created_at / updated_at | timestamp | sí | — | — |
 
+**Reglas de negocio:**
+- Fila única: los endpoints de configuración (`GET`/`PUT /api/admin/settings`)
+  no llevan id en la ruta, la resuelven con `StoreSetting::current()`.
+- `base_currency_id` tiene que estar siempre entre las monedas habilitadas:
+  todos los precios se expresan en ella, así que una base que la tienda no
+  acepta dejaría al storefront cotizando en algo que se niega a cobrar.
+- No se puede deshabilitar una moneda que cobra un método de pago activo, ni
+  crear un método que cobre en una moneda deshabilitada — la misma regla,
+  validada por los dos lados.
+- `logo_path` es relativo al disco de `commerce.store_logo.disk` (por defecto
+  `public`, servido por el servidor web vía `storage:link`). Reemplazar el logo
+  borra el archivo anterior.
+- Los campos públicos de esta fila (nombre, logo, colores, WhatsApp, moneda
+  base) se exponen sin sesión en `GET /api/store`, para que el storefront no
+  lleve la identidad de la tienda compilada dentro. Ver `docs/decisions.md`.
+
 ### store_enabled_currencies
 
 Pivot: monedas habilitadas para la tienda además de la moneda base.
@@ -505,6 +547,18 @@ uno atado a una única moneda.
 - El método de pago define la moneda de la orden (ej. Pago Móvil → Bs,
   Zelle → USD, Binance Pay → USDT); no se le pide al cliente elegir moneda y
   método por separado.
+- `type` no es editable: decide el provider, qué campos de cuenta tiene el
+  método y si pide comprobante. Cambiarlo reinterpretaría el `instructions`
+  guardado como los campos de otro método. Se crea el otro y se desactiva este.
+- Las claves válidas de `instructions` son las de
+  `PaymentMethodType::instructionFields()` más `notes`, y el alta/edición las
+  valida: una clave que el tipo no lee se guardaría y no se le mostraría nunca
+  a nadie. Editar reemplaza el blob entero, no lo mezcla.
+- Un método con órdenes no se elimina, se desactiva:
+  `orders.payment_method_id` es `nullOnDelete`, así que el borrado pasaría y
+  borraría en silencio cómo se pagaron esas órdenes.
+- `position` decide el orden en el checkout; el panel lo reescribe entero, como
+  el reordenamiento de imágenes de producto.
 
 ### fulfillment_methods
 

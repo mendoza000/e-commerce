@@ -10,12 +10,4 @@ class ZelleProvider extends ManualPaymentProvider
     {
         return PaymentMethodType::Zelle;
     }
-
-    protected function accountDetails(): array
-    {
-        return [
-            'email' => $this->method->instructionValue('email'),
-            'holder_name' => $this->method->instructionValue('holder_name'),
-        ];
-    }
 }

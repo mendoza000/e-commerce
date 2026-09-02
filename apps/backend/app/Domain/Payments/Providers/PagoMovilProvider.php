@@ -10,14 +10,4 @@ class PagoMovilProvider extends ManualPaymentProvider
     {
         return PaymentMethodType::PagoMovil;
     }
-
-    protected function accountDetails(): array
-    {
-        return [
-            'bank' => $this->method->instructionValue('bank'),
-            'bank_code' => $this->method->instructionValue('bank_code'),
-            'phone' => $this->method->instructionValue('phone'),
-            'document_number' => $this->method->instructionValue('document_number'),
-        ];
-    }
 }

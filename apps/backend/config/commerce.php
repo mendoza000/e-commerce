@@ -102,4 +102,24 @@ return [
         'max_images_per_product' => (int) env('MAX_IMAGES_PER_PRODUCT', 30),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Store Logo
+    |--------------------------------------------------------------------------
+    |
+    | Same public disk as product images, but its own size budget: a logo is
+    | shown small and everywhere, so it is downscaled harder and encoded at a
+    | higher quality than a catalogue photo.
+    |
+    */
+
+    'store_logo' => [
+        'disk' => env('STORE_LOGO_DISK', 'public'),
+        'directory' => 'store',
+        'max_kilobytes' => (int) env('STORE_LOGO_MAX_KB', 2048),
+        'mimes' => ['jpeg', 'jpg', 'png', 'webp'],
+        'image_max_width' => 600,
+        'image_quality' => 90,
+    ],
+
 ];

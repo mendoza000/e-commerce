@@ -299,6 +299,66 @@ Frontend:
 
 ---
 
+### Fase 5d — Configuración de la tienda
+
+**Objetivo:** que una instancia nueva se configure entera desde la UI — es lo que la Fase 7 necesita para el flujo de "nuevo cliente".
+
+Backend:
+
+- [x] Endpoints `GET`/`PUT` de `store_settings` restringidos a `owner` — sin id en la ruta: es una tabla de fila única, así que el endpoint la resuelve en vez de que se la indiquen
+- [x] Subida de logo de la tienda (reusando el pipeline de imágenes de la 5c) — `POST`/`DELETE /api/admin/settings/logo`, con su propio presupuesto de tamaño en `commerce.store_logo`; reemplazar el logo borra el archivo anterior
+- [x] Gestión de moneda base y monedas habilitadas (sincronizar `store_enabled_currencies`), validando que la moneda base esté siempre habilitada y que no se deshabilite una moneda usada por un método de pago activo — las dos validaciones viven en el `after()` del request, porque miran la petición entera
+- [x] **Nuevo método `ExchangeRateService::storeManual()`**: escribe fila nueva con `source = manual` y el `created_by` del admin, nunca actualiza la anterior. No hay endpoint de edición ni de borrado de tasas: la corrección es registrar la buena ahora
+- [x] Endpoints de tasas: registrar tasa manual, listar historial (filtrable por par y por fuente, paginado) y CRUD de `exchange_rate_settings`, validando el provider contra `ExchangeRateProviderType` — el mismo enum del que el `ExchangeRateProviderRegistry` resuelve
+- [x] Exponer el estado de salud de cada par automático — bloque `health` con `status` (`ok`/`failing`/`pending`/`manual`/`inactive`), `last_run_at`, `last_error_at`, `last_error` e `is_due`, más la última tasa vigente del par
+- [x] CRUD de `payment_methods` (activar/desactivar, editar datos de cuenta, moneda asociada, orden de aparición), restringido a `owner` — el tipo no es editable y un método con órdenes no se elimina, se desactiva
+- [x] Número de WhatsApp de contacto de la tienda: campo de `store_settings`, validado como dígitos con `+` opcional
+- [x] **Decisión tomada**: el storefront **sí** necesita un `GET` público de configuración. `GET /api/store` devuelve nombre, logo, colores, WhatsApp y moneda base. Ver `docs/decisions.md`
+- [x] Tests: 64 casos nuevos — 59 de feature (`ExchangeRateManagementTest` 20, `StoreSettingsTest` 19, `PaymentMethodManagementTest` 16, `StoreShowTest` 4) y 5 unitarios (`ExchangeRateManualTest`). Cubren el rebote de `staff` con 403 en todos estos endpoints, el alta manual creando historial nuevo sin pisar el anterior, y las validaciones de monedas en ambas direcciones. Suite completa: 535 casos en verde
+
+Frontend:
+
+- [ ] Pantalla de configuración de tienda: datos generales, logo, colores, moneda base, monedas habilitadas, número de WhatsApp de contacto
+- [ ] Pantalla de gestión de tasas de cambio: registrar nueva tasa manual, ver historial, configurar por par si la fuente es manual o automática (CriptoYa) con frecuencia y monto de referencia, y ver el estado de la última actualización automática
+- [ ] Pantalla de configuración de métodos de pago (activar/desactivar, editar datos, moneda asociada) — restringida a rol `owner`
+
+**Entregable de sub-fase:** una instancia recién clonada se configura entera desde el panel: datos de tienda, monedas, tasas y métodos de pago.
+
+### Decisiones tomadas durante la Fase 5d (backend)
+
+- **El historial de tasas no se edita ni se borra.** Solo hay `GET` y `POST`
+  sobre `exchange_rates`: es el registro contra el que se justifica la tasa
+  congelada de cada orden, y reescribir una fila haría que una orden correcta
+  en su momento pareciera equivocada. Ver `docs/decisions.md`.
+- **El storefront lee su identidad de la API.** `GET /api/store` expone nombre,
+  logo, colores, WhatsApp y moneda base. El theming estático de la Fase 2 se
+  quedaría viejo en cuanto un dueño renombra la tienda, y la Fase 7 trata
+  justamente de configurar una instancia nueva sin tocar código.
+- **Ni el par de un `exchange_rate_setting` ni el tipo de un `payment_method`
+  son editables.** El primero porque su historial de refresco (`last_run_at`,
+  `last_error`) describiría un par para el que nunca corrió; el segundo porque
+  reinterpretaría el JSON de `instructions` como los campos de otro método. En
+  ambos casos: crear el otro y dar de baja este.
+- **Los campos de cuenta de cada método de pago se declaran una sola vez**, en
+  `PaymentMethodType::instructionFields()`. De ahí los leen el provider (para
+  armar lo que ve el cliente), el request (para validar) y el panel (para
+  dibujar el formulario). Los cuatro providers dejaron de repetir esa lista.
+- **Un método de pago con órdenes se desactiva, no se elimina**:
+  `orders.payment_method_id` es `nullOnDelete`, así que el borrado pasaría y
+  borraría en silencio cómo se pagaron esas órdenes.
+- **Coherencia moneda ↔ método de pago, validada por los dos lados**: no se
+  puede deshabilitar una moneda que cobra un método activo, ni crear un método
+  que cobre en una moneda deshabilitada.
+
+**Entregable de fase:** flujo completo operable — un admin puede gestionar catálogo y procesar órdenes de principio a fin sin acceso directo a la BD, con separación real de permisos owner/staff.
+
+### Movido a la Fase 6
+
+- **Pantalla de configuración de métodos de envío/zonas**: todavía no existe tabla de zonas ni de tarifas (solo `fulfillment_methods.base_cost`), y ese modelo es entregable de la Fase 6. Construir la pantalla ahora sería construir UI sobre un esquema que la Fase 6 va a cambiar.
+- **Campo de courier/tracking/nota al marcar enviado**: `orders` no tiene esas columnas y el plan ya las contempla en la Fase 6. La 5b implementa la transición a `shipped` pelada; el dato de envío llega con su migración en la Fase 6.
+
+---
+
 ## Fase 6 — Fulfillment (envío) y cierre del ciclo de orden
 
 **Objetivo:** completar el ciclo de vida de la orden con la lógica de envío.

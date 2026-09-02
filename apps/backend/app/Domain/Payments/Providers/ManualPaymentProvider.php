@@ -14,7 +14,9 @@ use App\Models\User;
  * order's already-frozen `payment_amount`, and confirming is a human decision
  * with no external call.
  *
- * Subclasses only declare which fields of the JSON blob they expose.
+ * Subclasses only declare which type they are; which fields of the JSON blob
+ * that type exposes is declared once on PaymentMethodType, so the admin form
+ * and the customer-facing payload can never drift apart.
  */
 abstract class ManualPaymentProvider implements PaymentProviderInterface
 {
@@ -54,9 +56,20 @@ abstract class ManualPaymentProvider implements PaymentProviderInterface
 
     /**
      * The subset of `payment_methods.instructions` this method actually needs,
-     * so the API never leaks unrelated keys an admin left in the JSON.
+     * so the API never leaks unrelated keys an admin left in the JSON. A field
+     * the admin has not filled in comes back as null rather than missing, so
+     * the shape of the payload does not depend on how complete the config is.
      *
      * @return array<string, mixed>
      */
-    abstract protected function accountDetails(): array;
+    protected function accountDetails(): array
+    {
+        $details = [];
+
+        foreach ($this->type()->instructionFields() as $field) {
+            $details[$field] = $this->method->instructionValue($field);
+        }
+
+        return $details;
+    }
 }

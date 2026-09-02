@@ -23,11 +23,4 @@ class EfectivoContraEntregaProvider extends ManualPaymentProvider
     {
         return false;
     }
-
-    protected function accountDetails(): array
-    {
-        return [
-            'contact_phone' => $this->method->instructionValue('contact_phone'),
-        ];
-    }
 }

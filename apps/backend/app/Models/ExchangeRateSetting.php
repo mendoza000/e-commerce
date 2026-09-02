@@ -117,4 +117,29 @@ class ExchangeRateSetting extends Model
     {
         return $this->fromCurrency->code.'/'.$this->toCurrency->code;
     }
+
+    /**
+     * How this pair is doing, for the panel to show at a glance.
+     *
+     * A failing source is invisible otherwise: a failed refresh writes nothing
+     * to `exchange_rates`, so the store keeps quoting the last good rate and
+     * nobody notices until it is badly stale (PRD 8bis). This is what turns
+     * `last_error_at` into something an admin actually sees.
+     */
+    public function healthStatus(): string
+    {
+        if (! $this->is_active) {
+            return 'inactive';
+        }
+
+        if ($this->mode !== ExchangeRateMode::Automatic) {
+            return 'manual';
+        }
+
+        if ($this->last_error_at !== null) {
+            return 'failing';
+        }
+
+        return $this->last_run_at === null ? 'pending' : 'ok';
+    }
 }

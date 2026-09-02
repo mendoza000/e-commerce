@@ -7,12 +7,16 @@ use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PaymentMethodController;
 use App\Http\Controllers\Api\PaymentProofController;
 use App\Http\Controllers\Api\ProductController;
+use App\Http\Controllers\Api\StoreController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/categories', [CategoryController::class, 'index']);
 Route::get('/currencies', [CurrencyController::class, 'index']);
+// Name, logo, colours and WhatsApp number: what the storefront needs to stop
+// having the store's identity compiled into it (Fase 5d, docs/decisions.md).
+Route::get('/store', [StoreController::class, 'show']);
 Route::get('/products', [ProductController::class, 'index']);
 Route::get('/products/{slug}', [ProductController::class, 'show']);
 

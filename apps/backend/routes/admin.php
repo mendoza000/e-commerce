@@ -2,14 +2,19 @@
 
 use App\Http\Controllers\Api\Admin\AuthController;
 use App\Http\Controllers\Api\Admin\CategoryController;
+use App\Http\Controllers\Api\Admin\CurrencyController;
+use App\Http\Controllers\Api\Admin\ExchangeRateController;
+use App\Http\Controllers\Api\Admin\ExchangeRateSettingController;
 use App\Http\Controllers\Api\Admin\InventoryController;
 use App\Http\Controllers\Api\Admin\OrderController;
+use App\Http\Controllers\Api\Admin\PaymentMethodController;
 use App\Http\Controllers\Api\Admin\PaymentProofController;
 use App\Http\Controllers\Api\Admin\ProductController;
 use App\Http\Controllers\Api\Admin\ProductImageController;
 use App\Http\Controllers\Api\Admin\ProductOptionController;
 use App\Http\Controllers\Api\Admin\ProductOptionValueController;
 use App\Http\Controllers\Api\Admin\ProductVariantController;
+use App\Http\Controllers\Api\Admin\StoreSettingController;
 use App\Http\Controllers\Api\Admin\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -133,5 +138,46 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::post('/images/{image}/primary', [ProductImageController::class, 'makePrimary'])
             ->name('images.primary');
         Route::delete('/images/{image}', [ProductImageController::class, 'destroy'])->name('images.destroy');
+
+        // Store configuration. No id in the path: `store_settings` is a
+        // single-row table (docs/decisions.md), so there is one store per
+        // installation and the endpoint resolves it.
+        Route::get('/settings', [StoreSettingController::class, 'show'])->name('settings.show');
+        Route::put('/settings', [StoreSettingController::class, 'update'])->name('settings.update');
+        Route::post('/settings/logo', [StoreSettingController::class, 'uploadLogo'])->name('settings.logo.store');
+        Route::delete('/settings/logo', [StoreSettingController::class, 'deleteLogo'])->name('settings.logo.destroy');
+
+        // The fixed catalogue the settings pickers are built from.
+        Route::get('/currencies', [CurrencyController::class, 'index'])->name('currencies.index');
+
+        // Rates are append-only: no update, no delete. Correcting one means
+        // registering the right one now — see ExchangeRateController.
+        Route::get('/exchange-rates', [ExchangeRateController::class, 'index'])->name('exchange-rates.index');
+        Route::post('/exchange-rates', [ExchangeRateController::class, 'store'])->name('exchange-rates.store');
+
+        Route::get('/exchange-rate-settings', [ExchangeRateSettingController::class, 'index'])
+            ->name('exchange-rate-settings.index');
+        Route::post('/exchange-rate-settings', [ExchangeRateSettingController::class, 'store'])
+            ->name('exchange-rate-settings.store');
+        Route::patch('/exchange-rate-settings/{rateSetting}', [ExchangeRateSettingController::class, 'update'])
+            ->name('exchange-rate-settings.update');
+        Route::delete('/exchange-rate-settings/{rateSetting}', [ExchangeRateSettingController::class, 'destroy'])
+            ->name('exchange-rate-settings.destroy');
+
+        // Declared before the {paymentMethod} routes so "types" and "reorder"
+        // are never read as an id.
+        Route::get('/payment-method-types', [PaymentMethodController::class, 'types'])
+            ->name('payment-method-types.index');
+        Route::post('/payment-methods/reorder', [PaymentMethodController::class, 'reorder'])
+            ->name('payment-methods.reorder');
+
+        Route::get('/payment-methods', [PaymentMethodController::class, 'index'])->name('payment-methods.index');
+        Route::post('/payment-methods', [PaymentMethodController::class, 'store'])->name('payment-methods.store');
+        Route::get('/payment-methods/{paymentMethod}', [PaymentMethodController::class, 'show'])
+            ->name('payment-methods.show');
+        Route::patch('/payment-methods/{paymentMethod}', [PaymentMethodController::class, 'update'])
+            ->name('payment-methods.update');
+        Route::delete('/payment-methods/{paymentMethod}', [PaymentMethodController::class, 'destroy'])
+            ->name('payment-methods.destroy');
     });
 });
