@@ -13,21 +13,21 @@
 **Objetivo:** tener el esqueleto del proyecto corriendo localmente con Docker,
 sin lógica de negocio todavía.
 
-- [ ] Crear estructura de carpetas del monorepo (`/apps/backend`, `/apps/frontend`, `/docker`, `/docs`)
-- [ ] Inicializar repo Git, `.gitignore` general (Laravel + Node + Docker)
-- [ ] Instalar Laravel limpio en `/apps/backend` (API-only, sin Breeze/Jetstream)
-- [ ] Instalar Next.js (App Router + TypeScript + Tailwind) en `/apps/frontend` usando Bun (`bun create next-app` o instalación manual + `bun install`)
-- [ ] Base de datos: **PostgreSQL** (decisión tomada, documentar en `docs/decisions.md`)
-- [ ] Admin: **embebido en el mismo Next.js** bajo rutas `/admin/*` (decisión tomada, documentar en `docs/decisions.md`)
-- [ ] Gestor de paquetes frontend: **Bun** (decisión tomada, documentar en `docs/decisions.md` — usar imagen base `oven/bun` en el Dockerfile del frontend en vez de `node`)
-- [ ] Crear `docker-compose.yml` con servicios: `backend`, `frontend`, `db`, `redis` (para colas/cache)
-- [ ] Crear `Dockerfile` para backend (PHP-FPM + Nginx o usar `php artisan serve` en dev)
-- [ ] Crear `Dockerfile` para frontend usando imagen base `oven/bun` (multi-stage build: `bun install` → `bun run build` → runtime standalone de Next.js)
-- [ ] Configurar `.env.example` en backend y frontend con todas las variables previstas (aunque no se usen todas aún)
-- [ ] Verificar que `docker-compose up` levanta los 3-4 servicios sin errores
-- [ ] Verificar conectividad backend → base de datos (migración de prueba)
-- [ ] Verificar que frontend puede hacer un fetch de prueba al backend (endpoint `/api/health`)
-- [ ] Documentar en `README.md` cómo levantar el entorno local desde cero
+- [x] Crear estructura de carpetas del monorepo (`/apps/backend`, `/apps/frontend`, `/docker`, `/docs`)
+- [x] Inicializar repo Git, `.gitignore` general (Laravel + Node + Docker)
+- [x] Instalar Laravel limpio en `/apps/backend` (API-only, sin Breeze/Jetstream)
+- [x] Instalar Next.js (App Router + TypeScript + Tailwind) en `/apps/frontend` usando Bun (`bun create next-app` o instalación manual + `bun install`)
+- [x] Base de datos: **PostgreSQL** (decisión tomada, documentar en `docs/decisions.md`)
+- [x] Admin: **embebido en el mismo Next.js** bajo rutas `/admin/*` (decisión tomada, documentar en `docs/decisions.md`)
+- [x] Gestor de paquetes frontend: **Bun** (decisión tomada, documentar en `docs/decisions.md` — usar imagen base `oven/bun` en el Dockerfile del frontend en vez de `node`)
+- [x] Crear `docker-compose.yml` con servicios: `backend`, `frontend`, `db`, `redis` (para colas/cache)
+- [x] Crear `Dockerfile` para backend (PHP-FPM + Nginx o usar `php artisan serve` en dev)
+- [x] Crear `Dockerfile` para frontend usando imagen base `oven/bun` (multi-stage build: `bun install` → `bun run build` → runtime standalone de Next.js)
+- [x] Configurar `.env.example` en backend y frontend con todas las variables previstas (aunque no se usen todas aún) — el del frontend se creó en la Fase 5a
+- [x] Verificar que `docker-compose up` levanta los 3-4 servicios sin errores
+- [x] Verificar conectividad backend → base de datos (migración de prueba)
+- [x] Verificar que frontend puede hacer un fetch de prueba al backend (endpoint `/api/health`)
+- [x] Documentar en `README.md` cómo levantar el entorno local desde cero
 
 **Entregable de fase:** `docker-compose up` levanta todo, endpoint de salud responde, sin features de negocio aún.
 
@@ -63,22 +63,22 @@ sin lógica de negocio todavía.
 
 **Objetivo:** primer flujo end-to-end visible: productos del backend renderizados en el frontend.
 
-- [ ] Endpoint `GET /api/products` (listado con paginación y filtros básicos: categoría, búsqueda)
-- [ ] Endpoint `GET /api/products/{slug}` (detalle de producto con opciones, valores, variantes e imágenes asociadas por valor de opción)
-- [ ] Endpoint `GET /api/categories`
-- [ ] Endpoint `GET /api/currencies` (monedas habilitadas por la tienda + tasa de cambio vigente)
-- [ ] Formato de respuesta consistente (API Resources de Laravel, no exponer modelos crudos)
-- [ ] Manejo de errores estandarizado (formato JSON consistente para 404/422/500)
-- [ ] Configurar CORS para permitir requests del frontend
-- [ ] Crear capa de servicios en Next.js para consumir la API (`/lib/api/products.ts`)
-- [ ] Página de listado de productos (storefront)
-- [ ] Página de detalle de producto
-- [ ] Selector de variantes en la página de detalle (por opción: ej. botones de color, dropdown de talla) que actualice precio, stock disponible e imágenes mostradas según la combinación seleccionada
-- [ ] Deshabilitar en el selector las combinaciones de variante sin stock disponible (no permitir agregar al carrito una variante agotada — sin backorder, ver `PRD.md` sección 5quater)
-- [ ] Selector de moneda de visualización (si la tienda tiene más de una habilitada) que recalcule los precios mostrados con la tasa vigente
-- [ ] Componente de tarjeta de producto reutilizable
-- [ ] Manejo de estados de carga/error en el frontend
-- [ ] Definir sistema de theming inicial (variables CSS/Tailwind config) para personalización por cliente
+- [x] Endpoint `GET /api/products` (listado con paginación y filtros básicos: categoría, búsqueda)
+- [x] Endpoint `GET /api/products/{slug}` (detalle de producto con opciones, valores, variantes e imágenes asociadas por valor de opción)
+- [x] Endpoint `GET /api/categories`
+- [x] Endpoint `GET /api/currencies` (monedas habilitadas por la tienda + tasa de cambio vigente)
+- [x] Formato de respuesta consistente (API Resources de Laravel, no exponer modelos crudos)
+- [x] Manejo de errores estandarizado (formato JSON consistente para 404/422/500)
+- [x] Configurar CORS para permitir requests del frontend
+- [x] Crear capa de servicios en Next.js para consumir la API (`/lib/api/products.ts`)
+- [x] Página de listado de productos (storefront)
+- [x] Página de detalle de producto
+- [x] Selector de variantes en la página de detalle (por opción: ej. botones de color, dropdown de talla) que actualice precio, stock disponible e imágenes mostradas según la combinación seleccionada
+- [x] Deshabilitar en el selector las combinaciones de variante sin stock disponible (no permitir agregar al carrito una variante agotada — sin backorder, ver `PRD.md` sección 5quater)
+- [x] Selector de moneda de visualización (si la tienda tiene más de una habilitada) que recalcule los precios mostrados con la tasa vigente
+- [x] Componente de tarjeta de producto reutilizable
+- [x] Manejo de estados de carga/error en el frontend
+- [x] Definir sistema de theming inicial (variables CSS/Tailwind config) para personalización por cliente
 
 **Entregable de fase:** storefront público navegable mostrando productos reales desde el backend, con precios en la moneda elegida.
 
@@ -88,18 +88,18 @@ sin lógica de negocio todavía.
 
 **Objetivo:** flujo de compra completo hasta creación de orden, con pago pendiente.
 
-- [ ] Implementar estado de carrito en frontend (Zustand o Context) persistido en localStorage
-- [ ] UI de carrito (agregar, quitar, actualizar cantidad, ver totales)
-- [ ] Endpoint `POST /api/orders` (crear orden en estado `pending_payment`) con validación de stock
-- [ ] Reserva temporal de inventario al crear la orden (ventana configurable, ej. 30-60 min — ver `PRD.md` sección 12), implementada con transacción de base de datos + bloqueo de fila (`SELECT ... FOR UPDATE`) para evitar sobreventa por concurrencia
-- [ ] Registrar movimiento de tipo "reserva" en `inventory_movements` al crear la orden
-- [ ] Job programado que libera la reserva si expira sin pago (actualiza stock disponible y registra movimiento de "liberación" en `inventory_movements`)
-- [ ] Congelar tasa de cambio y moneda base/pago al crear la orden (no recalcular después)
-- [ ] Endpoints `GET /api/locations/states`, `GET /api/locations/municipalities?state_id=`, `GET /api/locations/parishes?municipality_id=` para los selects dependientes de dirección
-- [ ] Formulario de checkout: datos de envío (Estado/Municipio/Parroquia + referencia libre), datos de cliente (nombre, teléfono +58, tipo/número de documento), o checkout como invitado
-- [ ] Página de "orden creada" con resumen y siguiente paso (ir a pagar)
-- [ ] Endpoint `GET /api/orders/{id}` para que el cliente consulte su orden
-- [ ] Manejo de expiración de órdenes no pagadas (job programado que cancela y libera stock — mismo mecanismo que la reserva de inventario)
+- [x] Implementar estado de carrito en frontend (Zustand o Context) persistido en localStorage
+- [x] UI de carrito (agregar, quitar, actualizar cantidad, ver totales)
+- [x] Endpoint `POST /api/orders` (crear orden en estado `pending_payment`) con validación de stock
+- [x] Reserva temporal de inventario al crear la orden (ventana configurable, ej. 30-60 min — ver `PRD.md` sección 12), implementada con transacción de base de datos + bloqueo de fila (`SELECT ... FOR UPDATE`) para evitar sobreventa por concurrencia
+- [x] Registrar movimiento de tipo "reserva" en `inventory_movements` al crear la orden
+- [x] Job programado que libera la reserva si expira sin pago (actualiza stock disponible y registra movimiento de "liberación" en `inventory_movements`)
+- [x] Congelar tasa de cambio y moneda base/pago al crear la orden (no recalcular después)
+- [x] Endpoints `GET /api/locations/states`, `GET /api/locations/municipalities?state_id=`, `GET /api/locations/parishes?municipality_id=` para los selects dependientes de dirección
+- [x] Formulario de checkout: datos de envío (Estado/Municipio/Parroquia + referencia libre), datos de cliente (nombre, teléfono +58, tipo/número de documento), o checkout como invitado
+- [x] Página de "orden creada" con resumen y siguiente paso (ir a pagar)
+- [x] Endpoint `GET /api/orders/{id}` para que el cliente consulte su orden
+- [x] Manejo de expiración de órdenes no pagadas (job programado que cancela y libera stock — mismo mecanismo que la reserva de inventario)
 
 **Entregable de fase:** un usuario puede armar carrito, hacer checkout con dirección real venezolana, y queda una orden creada en base de datos con estado pendiente de pago y tasa congelada.
 
@@ -109,24 +109,38 @@ sin lógica de negocio todavía.
 
 **Objetivo:** implementar la pieza más específica del contexto venezolano.
 
-- [ ] Definir interfaz `PaymentProviderInterface` (incluye `getCurrency()`) en el backend
-- [ ] Implementar `PagoMovilProvider` (Bs), `ZelleProvider` (USD), `TransferenciaNacionalProvider` (Bs), `EfectivoContraEntregaProvider` (moneda configurable)
-- [ ] Definir interfaz `ExchangeRateProviderInterface` (`getRate`, `getSourceName`) — ver `PRD.md` sección 8bis
-- [ ] Implementar `ManualRateProvider` y `CriptoYaRateProvider` (consulta `https://criptoya.com/api/binancep2p/{par}/{monto}` con monto configurable)
-- [ ] Job programado (Laravel Scheduler) que ejecuta los providers automáticos según la frecuencia configurada por par y guarda el resultado en `exchange_rates`
-- [ ] Manejo de fallo del provider automático: no romper el checkout, mantener la última tasa válida, registrar el incidente (log) para revisión del admin
-- [ ] Tabla/config de `payment_methods` editable desde admin (habilitar/deshabilitar, datos de cuenta, moneda asociada)
-- [ ] Endpoint `GET /api/payment-methods` (métodos activos con sus instrucciones y moneda, para mostrar en checkout)
-- [ ] Endpoint `POST /api/orders/{id}/payment-proof` (subida de comprobante — imagen/PDF)
-- [ ] Configurar almacenamiento de archivos (local en dev, definir estrategia para prod) con compresión de imágenes al subir
-- [ ] Validaciones de archivo (tipo, tamaño máximo)
+- [x] Definir interfaz `PaymentProviderInterface` (incluye `getCurrency()`) en el backend
+- [x] Implementar `PagoMovilProvider` (Bs), `ZelleProvider` (USD), `TransferenciaNacionalProvider` (Bs), `EfectivoContraEntregaProvider` (moneda configurable)
+- [x] Definir interfaz `ExchangeRateProviderInterface` (`getRate`, `getSourceName`) — ver `PRD.md` sección 8bis
+- [x] Implementar `ManualRateProvider` y `CriptoYaRateProvider` (consulta `https://criptoya.com/api/binancep2p/{par}/{monto}` con monto configurable)
+- [x] Job programado (Laravel Scheduler) que ejecuta los providers automáticos según la frecuencia configurada por par y guarda el resultado en `exchange_rates`
+- [x] Manejo de fallo del provider automático: no romper el checkout, mantener la última tasa válida, registrar el incidente (log) para revisión del admin
+- [x] Tabla/config de `payment_methods` editable desde admin (habilitar/deshabilitar, datos de cuenta, moneda asociada) — modelo, seeder y providers listos; el CRUD de admin es Fase 5
+- [x] Endpoint `GET /api/payment-methods` (métodos activos con sus instrucciones y moneda, para mostrar en checkout)
+- [x] Endpoint `POST /api/orders/{id}/payment-proof` (subida de comprobante — imagen/PDF)
+- [x] Configurar almacenamiento de archivos (local en dev, definir estrategia para prod) con compresión de imágenes al subir
+- [x] Validaciones de archivo (tipo, tamaño máximo)
 - [ ] UI de checkout: selección de método de pago + instrucciones dinámicas según el método (mostrando el monto ya convertido a la moneda de ese método)
 - [ ] UI de subida de comprobante post-checkout
-- [ ] Estado de orden se actualiza a `payment_submitted` al subir comprobante
-- [ ] Al confirmar el pago (acción de admin en Fase 5), convertir la reserva en descuento definitivo de stock y registrar movimiento de tipo "venta" en `inventory_movements`
-- [ ] Notificación al admin cuando llega un nuevo comprobante (email y/o link de WhatsApp, vía cola)
+- [x] Estado de orden se actualiza a `payment_submitted` al subir comprobante
+- [x] Al confirmar el pago (acción de admin en Fase 5), convertir la reserva en descuento definitivo de stock y registrar movimiento de tipo "venta" en `inventory_movements` — `Order::confirmPayment()` implementado y testeado; el endpoint admin que lo dispara queda para Fase 5
+- [x] Notificación al admin cuando llega un nuevo comprobante (email y/o link de WhatsApp, vía cola)
 
 **Entregable de fase:** cliente puede elegir método de pago, ver instrucciones en la moneda correcta, subir comprobante, y la orden refleja ese estado.
+
+### Decisiones tomadas durante la Fase 4 (backend)
+
+- El checkout pasó de recibir `payment_currency_id` a recibir `payment_method_id`:
+  la moneda de pago se deriva del método elegido, de modo que una orden nunca
+  puede quedar congelada en una moneda distinta a la que realmente se cobra.
+  **Rompe el contrato de la Fase 3 — el formulario de checkout del frontend debe
+  actualizarse.**
+- Al subir un comprobante la reserva de inventario no se vuelve eterna: se
+  extiende `commerce.payment_review_minutes` (72 h por defecto) y el barrido
+  programado también cubre las órdenes en `payment_submitted`.
+- Los payment/exchange-rate providers viven en `app/Domain/Payments` y
+  `app/Domain/ExchangeRates`, no en `app/Providers` (reservado por Laravel para
+  los Service Providers).
 
 ---
 
@@ -134,29 +148,214 @@ sin lógica de negocio todavía.
 
 **Objetivo:** el admin puede operar la tienda sin tocar la base de datos directamente.
 
-- [ ] Rutas `/admin/*` embebidas en el mismo Next.js (decisión ya tomada en Fase 0)
-- [ ] Login de admin (usando Sanctum)
-- [ ] Middleware de protección de rutas admin (frontend y backend), incluyendo distinción de permisos `owner` vs `staff`
-- [ ] Gestión de usuarios staff: crear/desactivar cuentas de operador con acceso limitado a órdenes
-- [ ] CRUD de productos y categorías desde el panel (crear, editar, eliminar, gestión de imágenes)
-- [ ] CRUD de opciones de producto (crear/editar/eliminar opciones como "Color", "Talla" y sus valores posibles)
-- [ ] Generador de variantes: a partir de las combinaciones de valores de opción, crear las variantes correspondientes (con opción de generar todas las combinaciones o seleccionar solo algunas)
-- [ ] Edición individual de variante: SKU, precio (override opcional), stock
-- [ ] Ajuste manual de stock por variante (reposición, corrección, baja por daño/pérdida), registrado en `inventory_movements` con motivo
-- [ ] Vista de historial de movimientos de inventario por variante (kardex)
-- [ ] Subida de imágenes asociadas a un valor de opción específico (ej. fotos del color "Rojo") o al producto general si no aplica opción visual
-- [ ] Listado de órdenes con filtros por estado
-- [ ] Vista de detalle de orden: ver comprobante adjunto, historial de estados, tasa de cambio aplicada
-- [ ] Acción: confirmar pago (`payment_submitted` → `paid`) / rechazar pago (con motivo, vuelve a `pending_payment`)
-- [ ] Acción: marcar en preparación / marcar enviado (con courier/nota opcional) / marcar entregado / cancelar
-- [ ] Registro de `order_status_history` en cada transición (quién, cuándo, motivo)
-- [ ] Pantalla de configuración de tienda: datos generales, logo, colores, moneda base, monedas habilitadas
-- [ ] Pantalla de gestión de tasas de cambio: registrar nueva tasa manual, ver historial, y configurar por par si la fuente es manual o automática (CriptoYa), incluyendo frecuencia de actualización y monto de referencia
-- [ ] Pantalla de configuración de métodos de pago (activar/desactivar, editar datos, moneda asociada) — restringida a rol `owner`
-- [ ] Pantalla de configuración de métodos de envío/zonas
-- [ ] Pantalla de configuración de número de WhatsApp de contacto de la tienda
+Es la fase más grande del plan, así que va partida en cuatro sub-fases que se
+cierran y se demuestran por separado (ver "Notas de proceso"). El orden importa:
+5a habilita a las demás, y 5b es la que entrega valor operativo real más rápido
+— sin ella la tienda no puede cobrar una venta.
 
-**Entregable de fase:** flujo completo operable — un admin puede gestionar catálogo y procesar órdenes de principio a fin sin acceso directo a la BD, con separación de permisos owner/staff.
+### Decisiones a tomar antes de escribir código
+
+- [x] **Estrategia de sesión del admin**: se eligió **Sanctum SPA por cookie**. Implica que frontend y backend comparten dominio padre — los dominios de desarrollo pasan a ser `tienda.test` (frontend) y `api.tienda.test` (backend). Ver `docs/decisions.md`
+- [x] **Convivencia de guards**: las rutas admin usan el guard `web` (que resuelve a `User`) y las de cliente el guard `customer`. Ver `docs/decisions.md`
+- [x] **Frontera `owner` vs `staff`**: staff opera pedidos y lee catálogo; todo lo demás es `owner`. Ver `docs/decisions.md`
+
+---
+
+### Fase 5a — Autenticación, permisos y usuarios staff
+
+**Objetivo:** que exista un admin autenticado con permisos reales antes de construir una sola pantalla de gestión.
+
+Backend:
+
+- [x] Endpoints de sesión: `POST /api/admin/login`, `POST /api/admin/logout`, `GET /api/admin/me`, con rate limiting en el login (5 intentos por email+IP, más `throttle:10,1` en la ruta)
+- [x] Migración: agregar columna de desactivación a `users` — se eligió `is_active`, ver `docs/decisions.md`
+- [x] Rechazar a usuarios desactivados en el login y en cada request (middleware `active`), e invalidar sus sesiones vigentes al desactivarlos
+- [x] Middleware de rol (`role:owner`) + `UserPolicy` en `app/Policies`
+- [x] Grupo de rutas `/api/admin/*` en `routes/admin.php`, separado de las rutas públicas de `routes/api.php`
+- [x] CRUD de usuarios staff (crear, editar, desactivar/reactivar) restringido a `owner`, impidiendo que un owner se desactive a sí mismo o que la tienda quede sin owners activos
+- [x] Manejo de 401/403 en el formato de error estándar de la API (antes un 403 caía en el catch-all de 500 en producción)
+- [x] Tests de feature: 27 casos en `tests/Feature/Api/Admin` — login/logout, usuario desactivado rechazado, no divulgación de existencia de cuentas, rate limiting, staff rebotado con 403 en cada endpoint restringido, invariante de "siempre queda un owner activo"
+- [x] Tests unitarios: 18 casos en `tests/Unit/Models/UserAccountTest` (activación, scopes, casos borde de `isLastActiveOwner`, invalidación de sesiones) y `tests/Unit/Http/EnsureUserHasRoleTest` (varios roles permitidos, request sin usuario, rol inexistente)
+
+Frontend:
+
+- [x] Rutas `/admin/*` embebidas en el mismo Next.js (decisión ya tomada en Fase 0), con layout propio separado del storefront
+- [x] Pantalla de login de admin
+- [x] Protección de rutas admin en el frontend (`RequireAdmin`) + manejo de sesión expirada (redirect a login)
+- [x] Ocultar en la UI lo que el rol no puede usar (bloque `permissions` de `UserResource`) — sin confiar en eso como seguridad: la autoridad es el backend
+- [x] Pantalla de gestión de usuarios staff
+- [ ] Verificar el build del frontend (`bun install && bun run build`) — no se pudo ejecutar en el entorno donde se escribió el código
+
+**Entregable de sub-fase:** un owner y un staff inician sesión, ven menús distintos, y el staff recibe 403 del backend si intenta tocar configuración.
+
+---
+
+### Fase 5b — Gestión de órdenes
+
+**Objetivo:** cerrar el ciclo operativo que la Fase 4 dejó a medias — el admin puede cobrar y despachar.
+
+Backend:
+
+- [x] Endpoint `GET /api/admin/orders` (listado con filtro por estado, búsqueda por número de orden/cliente, paginación) — la búsqueda cubre también documento y teléfono, y escapa los comodines de `ILIKE`
+- [x] Endpoint `GET /api/admin/orders/{order}` (detalle: cliente, items, tasa aplicada, historial de estados, comprobantes) — enlazado por `order_number` como en el storefront; el id numérico sigue sin salir de la base
+- [x] Endpoint de descarga del comprobante: se eligió **streaming autenticado** (`GET /api/admin/payment-proofs/{proof}`) en vez de URL firmada temporal. Ver `docs/decisions.md`
+- [x] Endpoint `POST /api/admin/orders/{order}/confirm-payment` (envuelve `Order::confirmPayment()`, ya implementado y testeado en Fase 4)
+- [x] Endpoint `POST /api/admin/orders/{order}/reject-payment` con motivo obligatorio (envuelve `Order::rejectPayment()`)
+- [x] Endpoint de transición `POST /api/admin/orders/{order}/transition` para marcar en preparación / enviado / entregado, apoyado en `OrderStatus::allowedTransitions()`; acepta solo esos tres estados, ver `docs/decisions.md`
+- [x] **Nuevo método de dominio `Order::cancel(User $admin, string $reason)`**: libera la reserva si la orden todavía no estaba pagada, y reingresa el stock si ya lo estaba, registrando el movimiento correspondiente en `inventory_movements`. El reingreso usa un tipo de movimiento nuevo, `InventoryMovementType::Restock`, ver `docs/decisions.md`
+- [x] Verificar que todas las acciones nuevas pasen por `Order::transitionTo()`, que ya escribe `order_status_history` sola, y que registren `changed_by` — las cuatro son métodos de `Order` que toman el row lock de la orden y reciben el admin que actuó
+- [x] Tests: 54 casos nuevos — 37 de feature (`OrderActionsTest` 16, `OrderListTest` 14, `PaymentProofDownloadTest` 7) y 17 unitarios, de los cuales 12 en `OrderCancellationTest` recorren la cancelación desde cada estado verificando stock y kardex. `staff` ejecuta las acciones en los tests, no solo `owner`
+
+Frontend:
+
+- [ ] Listado de órdenes con filtros por estado
+- [ ] Vista de detalle de orden: datos del cliente, items, comprobante visualizable, historial de estados, tasa de cambio aplicada
+- [ ] Acciones de confirmar pago / rechazar pago (con motivo) y de avance de estado, mostrando solo las transiciones válidas para el estado actual
+- [ ] Confirmación explícita en las acciones difíciles de revertir (confirmar pago, cancelar)
+
+**Entregable de sub-fase:** una orden creada desde el storefront se cobra, se prepara y se despacha desde el panel, con inventario y kardex correctos en cada camino — incluido el de cancelación.
+
+### Decisiones tomadas durante la Fase 5b (backend)
+
+- El comprobante se sirve por **streaming autenticado** (`GET /api/admin/payment-proofs/{proof}`),
+  no por URL firmada temporal: una URL firmada es una credencial al portador que
+  sigue funcionando fuera de la sesión que la pidió y queda escrita en el
+  historial del navegador. Ver `docs/decisions.md`.
+- El endpoint genérico de transición acepta **solo** `preparing`, `shipped` y
+  `delivered`. Cobrar, devolver a `pending_payment` y cancelar mueven stock, y
+  cada uno tiene su endpoint: aceptarlos aquí sería saltarse ese efecto.
+- Cancelar una orden ya pagada reingresa el stock con un tipo de movimiento
+  nuevo, `InventoryMovementType::Restock`, distinto de `Release` (que solo
+  suelta una reserva, sin tocar `stock`) y de `Adjustment` (que la Fase 5c
+  reserva para correcciones manuales de conteo).
+- **Hueco detectado, no resuelto en esta sub-fase:** una orden con un método de
+  pago que no pide comprobante (`EfectivoContraEntrega`, `requiresProof() ===
+  false`) se queda en `pending_payment` para siempre: la máquina de estados no
+  permite `pending_payment → paid`, así que el panel no puede cobrarla. Cerrarlo
+  implica cambiar un invariante de la Fase 1 (`OrderStatus::allowedTransitions`,
+  con un test que lo fija) y decidir cuándo se considera pagada una venta contra
+  entrega — antes o al momento de entregar. Queda como decisión de producto.
+
+---
+
+### Fase 5c — Catálogo, variantes e inventario
+
+**Objetivo:** el admin puede cargar y mantener el catálogo sin seeders ni SQL.
+
+Backend:
+
+- [x] CRUD de categorías — con `slug` derivado del nombre, guardia contra ciclos en `parent_id` y negativa a eliminar una categoría con productos o subcategorías (ambas FK son `nullOnDelete`: la base la aceptaría descategorizando todo en silencio)
+- [x] CRUD de productos, con generación y validación de `slug` único — "eliminar" es **baja lógica** y arrastra a las variantes vivas; restaurar las devuelve todas. Ver `docs/decisions.md`
+- [x] CRUD de opciones de producto y sus valores ("Color", "Talla" y sus valores posibles) — agregar una opción se rechaza si ya hay variantes con combinaciones; agregar un valor siempre se permite
+- [x] Generador de variantes a partir de las combinaciones de valores de opción (todas o una selección), respetando la regla de variante implícita definida en la Fase 1 — `VariantGenerator`, idempotente: la combinación que ya existe se cuenta como omitida
+- [x] Edición individual de variante: SKU, `price_override`, activa/inactiva — **el stock no**: cambiarlo exige motivo y pasa por el endpoint de ajuste, ver `docs/decisions.md`
+- [x] **Nuevo método `InventoryReservationService::adjust()`**: toma `lockForUpdate` releyendo la fila, exige motivo y rechaza dejar `stock` por debajo de `reserved_quantity`
+- [x] Endpoint de ajuste manual de stock por variante (reposición, corrección de conteo físico, baja por daño/pérdida) con motivo obligatorio y `created_by`
+- [x] Endpoint de historial de movimientos de inventario por variante (kardex), paginado y filtrable por tipo
+- [x] **Pipeline de imágenes de producto**: disco `public` configurable (`commerce.product_image`), `storage:link` documentado en el README, y la compresión extraída de `PaymentProofService` a `ImageStorageService`, que ahora usan los dos
+- [x] Endpoints de subida, borrado, reordenamiento e imagen principal, asociadas a un `product_option_value_id` o al producto general
+- [x] Tests: 135 casos nuevos — 89 de feature (`ProductManagementTest` 19, `InventoryTest` 15, `ProductImageManagementTest` 15, `VariantManagementTest` 14, `ProductOptionManagementTest` 14, `CategoryManagementTest` 12) y 46 unitarios (`VariantGeneratorTest` 18, `ProductCatalogTest` 15, `InventoryAdjustmentTest` 7, `ImageStorageServiceTest` 6). Cubren el generador, el ajuste con reserva viva, el kardex, las validaciones de archivo y el rebote de `staff` con 403 en cada endpoint de escritura. Suite completa: 471 casos en verde
+
+Frontend:
+
+- [ ] CRUD de productos y categorías desde el panel
+- [ ] CRUD de opciones de producto y sus valores
+- [ ] UI del generador de variantes (elegir qué combinaciones crear antes de generarlas)
+- [ ] Edición individual de variante: SKU, precio (override opcional), stock
+- [ ] Formulario de ajuste manual de stock con motivo
+- [ ] Vista de historial de movimientos de inventario por variante (kardex)
+- [ ] Subida de imágenes asociadas a un valor de opción específico (ej. fotos del color "Rojo") o al producto general si no aplica opción visual, con previsualización
+
+**Entregable de sub-fase:** un producto con opciones, variantes, imágenes y stock se crea de punta a punta desde el panel y aparece correctamente en el storefront.
+
+### Decisiones tomadas durante la Fase 5c (backend)
+
+- **El stock no es un campo editable.** La edición de variante acepta SKU,
+  `price_override` y activa/inactiva, y rechaza `stock` con un 422 explícito.
+  Toda unidad que se mueve deja una fila en el kardex, y eso exige motivo: el
+  único camino es `POST /variants/{variant}/adjust-stock`. Ver
+  `docs/decisions.md`.
+- **"Eliminar" un producto es baja lógica** y arrastra a sus variantes vivas.
+  Restaurarlo las devuelve **todas**, incluidas las que se habían retirado una
+  por una: `deleted_at` tiene precisión de segundos, así que no hay forma
+  fiable de distinguirlas. Ver `docs/decisions.md`.
+- **El generador es el único que escribe el conjunto de variantes.** Crear un
+  producto crea su variante implícita; generar combinaciones reales la archiva.
+  Agregar una opción a un producto que ya tiene variantes con combinaciones se
+  rechaza (esas variantes quedarían indefinidas en el eje nuevo); agregar un
+  valor a una opción existente siempre se permite.
+- **Las imágenes se cuelgan del valor de opción, no de la variante** (como pide
+  el PRD): las fotos de "Rojo" las heredan Rojo-38, Rojo-39 y Rojo-40 sin
+  duplicarlas. `ImageStorageService` es ahora el único que sabe escribir un
+  archivo subido, y lo comparten comprobantes e imágenes de catálogo.
+- **Hueco conocido, no cerrado en esta sub-fase:**
+  `InventoryReservationService::lockVariantsForOrder()` valida
+  `product_variants.is_active` pero no mira `products.is_active`. Archivar el
+  producto sí cierra la puerta (la baja lógica arrastra a las variantes, y la
+  consulta las excluye), pero **despublicar** no: las variantes de un producto
+  con `is_active = false` siguen siendo reservables por id, aunque el
+  storefront ya no las ofrezca. Cerrarlo toca una ruta de la Fase 4 con tests
+  propios y merece su propia decisión.
+
+---
+
+### Fase 5d — Configuración de la tienda
+
+**Objetivo:** que una instancia nueva se configure entera desde la UI — es lo que la Fase 7 necesita para el flujo de "nuevo cliente".
+
+Backend:
+
+- [x] Endpoints `GET`/`PUT` de `store_settings` restringidos a `owner` — sin id en la ruta: es una tabla de fila única, así que el endpoint la resuelve en vez de que se la indiquen
+- [x] Subida de logo de la tienda (reusando el pipeline de imágenes de la 5c) — `POST`/`DELETE /api/admin/settings/logo`, con su propio presupuesto de tamaño en `commerce.store_logo`; reemplazar el logo borra el archivo anterior
+- [x] Gestión de moneda base y monedas habilitadas (sincronizar `store_enabled_currencies`), validando que la moneda base esté siempre habilitada y que no se deshabilite una moneda usada por un método de pago activo — las dos validaciones viven en el `after()` del request, porque miran la petición entera
+- [x] **Nuevo método `ExchangeRateService::storeManual()`**: escribe fila nueva con `source = manual` y el `created_by` del admin, nunca actualiza la anterior. No hay endpoint de edición ni de borrado de tasas: la corrección es registrar la buena ahora
+- [x] Endpoints de tasas: registrar tasa manual, listar historial (filtrable por par y por fuente, paginado) y CRUD de `exchange_rate_settings`, validando el provider contra `ExchangeRateProviderType` — el mismo enum del que el `ExchangeRateProviderRegistry` resuelve
+- [x] Exponer el estado de salud de cada par automático — bloque `health` con `status` (`ok`/`failing`/`pending`/`manual`/`inactive`), `last_run_at`, `last_error_at`, `last_error` e `is_due`, más la última tasa vigente del par
+- [x] CRUD de `payment_methods` (activar/desactivar, editar datos de cuenta, moneda asociada, orden de aparición), restringido a `owner` — el tipo no es editable y un método con órdenes no se elimina, se desactiva
+- [x] Número de WhatsApp de contacto de la tienda: campo de `store_settings`, validado como dígitos con `+` opcional
+- [x] **Decisión tomada**: el storefront **sí** necesita un `GET` público de configuración. `GET /api/store` devuelve nombre, logo, colores, WhatsApp y moneda base. Ver `docs/decisions.md`
+- [x] Tests: 64 casos nuevos — 59 de feature (`ExchangeRateManagementTest` 20, `StoreSettingsTest` 19, `PaymentMethodManagementTest` 16, `StoreShowTest` 4) y 5 unitarios (`ExchangeRateManualTest`). Cubren el rebote de `staff` con 403 en todos estos endpoints, el alta manual creando historial nuevo sin pisar el anterior, y las validaciones de monedas en ambas direcciones. Suite completa: 535 casos en verde
+
+Frontend:
+
+- [ ] Pantalla de configuración de tienda: datos generales, logo, colores, moneda base, monedas habilitadas, número de WhatsApp de contacto
+- [ ] Pantalla de gestión de tasas de cambio: registrar nueva tasa manual, ver historial, configurar por par si la fuente es manual o automática (CriptoYa) con frecuencia y monto de referencia, y ver el estado de la última actualización automática
+- [ ] Pantalla de configuración de métodos de pago (activar/desactivar, editar datos, moneda asociada) — restringida a rol `owner`
+
+**Entregable de sub-fase:** una instancia recién clonada se configura entera desde el panel: datos de tienda, monedas, tasas y métodos de pago.
+
+### Decisiones tomadas durante la Fase 5d (backend)
+
+- **El historial de tasas no se edita ni se borra.** Solo hay `GET` y `POST`
+  sobre `exchange_rates`: es el registro contra el que se justifica la tasa
+  congelada de cada orden, y reescribir una fila haría que una orden correcta
+  en su momento pareciera equivocada. Ver `docs/decisions.md`.
+- **El storefront lee su identidad de la API.** `GET /api/store` expone nombre,
+  logo, colores, WhatsApp y moneda base. El theming estático de la Fase 2 se
+  quedaría viejo en cuanto un dueño renombra la tienda, y la Fase 7 trata
+  justamente de configurar una instancia nueva sin tocar código.
+- **Ni el par de un `exchange_rate_setting` ni el tipo de un `payment_method`
+  son editables.** El primero porque su historial de refresco (`last_run_at`,
+  `last_error`) describiría un par para el que nunca corrió; el segundo porque
+  reinterpretaría el JSON de `instructions` como los campos de otro método. En
+  ambos casos: crear el otro y dar de baja este.
+- **Los campos de cuenta de cada método de pago se declaran una sola vez**, en
+  `PaymentMethodType::instructionFields()`. De ahí los leen el provider (para
+  armar lo que ve el cliente), el request (para validar) y el panel (para
+  dibujar el formulario). Los cuatro providers dejaron de repetir esa lista.
+- **Un método de pago con órdenes se desactiva, no se elimina**:
+  `orders.payment_method_id` es `nullOnDelete`, así que el borrado pasaría y
+  borraría en silencio cómo se pagaron esas órdenes.
+- **Coherencia moneda ↔ método de pago, validada por los dos lados**: no se
+  puede deshabilitar una moneda que cobra un método activo, ni crear un método
+  que cobre en una moneda deshabilitada.
+
+**Entregable de fase:** flujo completo operable — un admin puede gestionar catálogo y procesar órdenes de principio a fin sin acceso directo a la BD, con separación real de permisos owner/staff.
+
+### Movido a la Fase 6
+
+- **Pantalla de configuración de métodos de envío/zonas**: todavía no existe tabla de zonas ni de tarifas (solo `fulfillment_methods.base_cost`), y ese modelo es entregable de la Fase 6. Construir la pantalla ahora sería construir UI sobre un esquema que la Fase 6 va a cambiar.
+- **Campo de courier/tracking/nota al marcar enviado**: `orders` no tiene esas columnas y el plan ya las contempla en la Fase 6. La 5b implementa la transición a `shipped` pelada; el dato de envío llega con su migración en la Fase 6.
 
 ---
 

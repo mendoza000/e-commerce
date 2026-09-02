@@ -274,3 +274,433 @@ por qué `reserved_quantity` subió o bajó en cualquier momento) sobre la
 brevedad original de solo registrar movimientos "definitivos". La entrada de
 2026-07-01 queda superada en este punto — se conserva por historial, no se
 reescribe.
+
+---
+
+### 2026-09-01 — Sesión del admin: Sanctum SPA por cookie, no token Bearer
+
+**Decisión:** el panel se autentica con una sesión first-party de Sanctum
+(cookie + CSRF), no con un token Bearer. Se habilita `statefulApi()` en
+`bootstrap/app.php` y el navegador llama a la API directamente.
+
+**Alternativas consideradas:** token Bearer emitido por Laravel y guardado por
+Next.js en una cookie `httpOnly`, reenviado como header `Authorization`.
+
+**Razón:** es el camino oficial de Laravel para SPAs de primera parte, no
+requiere que Next.js actúe como proxy de autenticación, y evita tener que
+gestionar el ciclo de vida de un token a mano.
+
+**Implicaciones técnicas:**
+- **Frontend y backend deben compartir dominio padre**, porque la cookie de
+  sesión no cruza dominios distintos. Los dominios de desarrollo cambian:
+  backend `api.tienda.test`, frontend `tienda.test` (antes `backend.test` y
+  `localhost:3000`). En producción se replica con `tienda.com` /
+  `api.tienda.com`.
+- `SESSION_DOMAIN=.tienda.test` y `SANCTUM_STATEFUL_DOMAINS` en el `.env` del
+  backend; `config/cors.php` suma `sanctum/csrf-cookie` a sus `paths` y ya
+  tenía `supports_credentials: true`.
+- Toda escritura desde el panel manda el header `X-XSRF-TOKEN` leído de la
+  cookie: `fetch` no lo hace solo (a diferencia de axios). Ver
+  `lib/api/admin/client.ts`, que además reintenta una vez ante un 419.
+- Las páginas del panel se renderizan en cliente: la cookie vive en el
+  navegador, así que es él quien habla con la API. El layout servidor le pasa
+  la URL pública de la API como prop, para no bakearla en build.
+- En los tests, Sanctum solo adjunta sesión a requests cuyo `Origin` coincide
+  con un dominio stateful — de ahí `TestCase::actingFromAdminPanel()`.
+
+---
+
+### 2026-09-01 — Frontera de permisos: staff solo opera pedidos
+
+**Decisión:** `staff` puede listar, ver y transicionar órdenes (incluido
+confirmar y rechazar pagos) y leer el catálogo. Todo lo demás — escritura de
+catálogo, inventario, usuarios, tasas de cambio, métodos de pago y
+configuración de tienda — es exclusivo de `owner`.
+
+**Alternativas consideradas:** dejar que staff también edite catálogo y stock,
+restringiendo solo la configuración "sensible" que menciona el PRD.
+
+**Razón:** el PRD (sección 4) solo define staff por lo que *no* puede hacer
+("configuración sensible"), lo cual no alcanza para escribir un middleware. Se
+elige la lectura estricta: staff es un rol de operación de pedidos, no de
+administración de la tienda. Es la frontera más fácil de explicar a un cliente
+y la más fácil de ampliar después si hace falta.
+
+**Implicaciones técnicas:**
+- Se implementa con el middleware `role:owner` sobre grupos de rutas, más
+  Policies en `app/Policies` para las reglas por registro.
+- `UserResource` expone un bloque `permissions` para que el panel oculte lo que
+  la cuenta no puede usar. Es una pista de UI: la autoridad sigue siendo el
+  backend, que responde 403 igual.
+- La tienda nunca puede quedarse sin owner activo. No hace falta una regla
+  explícita para eso: `UserPolicy::deactivate` prohíbe autodesactivarse, y
+  desactivar a otro exige ser owner activo — con lo cual el objetivo nunca era
+  el último. La única fuga restante, autodegradarse a staff, la cierra
+  `UserUpdateRequest::after()`.
+
+---
+
+### 2026-09-01 — Cuentas de admin desactivables, nunca borrables
+
+**Decisión:** los usuarios admin se desactivan con una columna `is_active`; no
+se eliminan ni se usa borrado lógico.
+
+**Alternativas consideradas:** `deactivated_at` (timestamp), o `SoftDeletes`.
+
+**Razón:** un operador que procesó órdenes tiene que seguir siendo resoluble
+desde `order_status_history.changed_by` para siempre. `is_active` booleano
+mantiene la columna consistente con el resto del esquema, que ya usa ese mismo
+nombre en productos, variantes, métodos de pago, métodos de envío y
+configuración de tasas.
+
+**Implicaciones técnicas:**
+- Desactivar también borra las sesiones abiertas de esa cuenta
+  (`User::invalidateSessions()`, driver `database`), para que el cierre sea
+  inmediato y no en el próximo login.
+- El middleware `active` cubre lo que ese borrado no puede: drivers de sesión
+  inalcanzables o requests ya en vuelo.
+- `AuthController::logout()` llama a `Auth::forgetGuards()`, porque
+  `auth:sanctum` resuelve por un `RequestGuard` que cachea el usuario y no se
+  limpia al cerrar sesión del guard `web`. Con php-fpm el proceso muere antes
+  de que importe; con un worker de larga vida sería identidad obsoleta.
+
+---
+
+### 2026-09-01 — Comprobantes: streaming autenticado, no URL firmada
+
+**Decisión:** el panel lee los comprobantes por `GET /api/admin/payment-proofs/{proof}`,
+que transmite el archivo desde el disco privado dentro de la sesión del admin.
+No se emiten URLs firmadas temporales.
+
+**Alternativas consideradas:** `Storage::temporaryUrl()` — el disco `local` de
+este proyecto tiene `serve => true`, así que la soporta, y en S3 saldría gratis.
+
+**Razón:** un comprobante es el recibo bancario de un cliente. Una URL firmada
+es una credencial al portador: funciona para cualquiera que la tenga, sigue
+funcionando después de que la sesión que la pidió se cerró, y queda escrita en
+el historial del navegador y en los logs de cualquier proxy intermedio. El
+streaming deja la sesión del admin como única llave, y se comporta igual sea
+cual sea el disco que use el despliegue.
+
+**Implicaciones técnicas:**
+- La ruta no está anidada bajo la orden: cualquier admin puede ver cualquier
+  orden, así que la orden en el path sería decoración que el endpoint tendría
+  que volver a verificar.
+- Se sirve `inline` con el `mime_type` guardado, para que el panel muestre la
+  imagen o el PDF en su sitio en vez de obligar a descargarlo. Como el frontend
+  vive en `tienda.test` y la API en `api.tienda.test` — mismo dominio padre —
+  la cookie de sesión viaja también en un `<img src="...">`.
+- Una fila cuyo archivo ya no está en disco responde 404, no un stream vacío.
+
+---
+
+### 2026-09-01 — Cancelar devuelve stock, con un movimiento propio en el kardex
+
+**Decisión:** `Order::cancel(User $admin, string $reason)` decide según el
+estado: si la orden todavía no estaba pagada libera la reserva (`Release`), y si
+ya lo estaba reingresa las unidades a `stock` con un tipo de movimiento nuevo,
+`InventoryMovementType::Restock`.
+
+**Alternativas consideradas:** reusar `Release` para ambos casos, o reusar
+`Adjustment`.
+
+**Razón:** los tres movimientos son cosas distintas y el kardex existe
+justamente para poder distinguirlas después. `Release` solo suelta una reserva
+y nunca toca `stock`; usarlo para un reingreso volvería ambiguo cada renglón del
+histórico. `Adjustment` es la corrección manual de un conteo físico, que la Fase
+5c va a introducir con motivo obligatorio: mezclarla con las cancelaciones haría
+que ese reporte mintiera. La columna `inventory_movements.type` es `string`, así
+que el caso nuevo no costó migración.
+
+**Implicaciones técnicas:**
+- `InventoryReservationService::release()` y el nuevo `restock()` reciben un
+  `?User $admin`, para que el kardex registre quién canceló. Sigue siendo `null`
+  cuando el que libera es el barrido programado: ahí no lo decidió nadie, lo
+  decidió el vencimiento.
+- Cancelar una orden `shipped` o `delivered` lo rechaza la máquina de estados
+  (422 `invalid_order_transition`): la mercancía ya salió, y reingresarla es una
+  decisión de almacén, no un clic.
+- `cancel()` es idempotente y toma el row lock de la orden, igual que
+  `confirmPayment()`: dos paneles cancelando a la vez liberan una sola vez.
+
+---
+
+### 2026-09-01 — Un endpoint por acción de orden, no un "cambiar estado" genérico
+
+**Decisión:** el panel tiene `confirm-payment`, `reject-payment` y `cancel` como
+endpoints propios, y un `transition` genérico que solo acepta `preparing`,
+`shipped` y `delivered`.
+
+**Alternativas consideradas:** un único `PATCH /orders/{order}` con el estado
+destino, apoyado en `OrderStatus::allowedTransitions()` para validar.
+
+**Razón:** las transiciones no son equivalentes entre sí. Pasar a `paid`
+descuenta stock, volver a `pending_payment` reabre la ventana de reserva, y
+cancelar libera o reingresa unidades. Un endpoint genérico que las aceptara
+sería una puerta trasera para ejecutar el cambio de estado sin su efecto
+colateral. Las tres que no mueven nada más que la orden sí comparten endpoint.
+
+**Implicaciones técnicas:**
+- `OrderStatus::fulfillmentStatuses()` es la única fuente de esa lista: la usan
+  la validación del request y el bloque `actions` del recurso.
+- El recurso de orden expone `actions` (`can_confirm_payment`,
+  `can_reject_payment`, `can_cancel` y `available_transitions`) derivado de la
+  máquina de estados, para que el panel dibuje solo los botones que funcionan.
+  Es una pista de UI, como `permissions` en `UserResource`: la autoridad sigue
+  siendo el backend, que responde 422 igual.
+- Las órdenes quedan fuera del grupo `role:owner`: `staff` es un rol de
+  operación de pedidos y ejecuta las cuatro acciones.
+
+---
+
+### 2026-09-01 — El stock no se edita: se ajusta con motivo
+
+**Decisión:** `PATCH /api/admin/variants/{variant}` acepta `sku`,
+`price_override` e `is_active`, y **rechaza** `stock` con un 422 explícito
+(`stock.prohibited`). La única forma de cambiarlo es
+`POST /api/admin/variants/{variant}/adjust-stock`, que exige un
+`quantity_change` con signo y un motivo, y escribe una fila `adjustment` en el
+kardex con el `created_by` del admin.
+
+**Alternativas consideradas:** aceptar `stock` en la edición de variante como
+un campo más (que es como lo enunciaba el plan) y emitir el movimiento por
+detrás, con un motivo genérico tipo "edición manual".
+
+**Razón:** `inventory_movements` existe para poder responder "¿por qué hay 7 y
+no 10?". Un campo de stock en un formulario no trae esa respuesta: trae un
+número. Aceptarlo obligaría a inventar un motivo, y un kardex lleno de
+"edición manual" no es un kardex, es un log de escrituras. Además el ajuste es
+relativo con signo (`+12 llegaron`, `-3 rotas`) mientras que un campo es
+absoluto, y un valor absoluto pisa en silencio una venta confirmada un segundo
+antes.
+
+**Implicaciones técnicas:**
+- `InventoryReservationService::adjust()` relee la fila con `lockForUpdate` en
+  vez de confiar en la instancia recibida, para que el delta se aplique al
+  stock como está ahora y no como lo vio el panel.
+- Se rechaza dejar `stock` por debajo de `reserved_quantity`: esas unidades ya
+  están prometidas a órdenes abiertas. Bajar hasta exactamente ese número sí se
+  permite.
+- `reserved_quantity` también está prohibido en la edición: lo maneja el ciclo
+  de vida de las órdenes, no el editor de catálogo.
+- Es el primer código que emite `InventoryMovementType::Adjustment`, que existía
+  en el enum desde la Fase 1 sin emisor.
+
+---
+
+### 2026-09-01 — Eliminar un producto es baja lógica, y restaurar lo devuelve entero
+
+**Decisión:** `DELETE /api/admin/products/{product}` archiva (soft delete) el
+producto y, en la misma transacción, sus variantes vivas.
+`POST /api/admin/products/{product}/restore` devuelve el producto y **todas**
+sus variantes archivadas, incluidas las que se habían retirado una por una
+antes de archivar el producto.
+
+**Alternativas consideradas:** (a) borrado real; (b) archivar el producto sin
+tocar las variantes; (c) sellar las variantes con el `deleted_at` del producto
+para restaurar solo las que se llevó ese archivado.
+
+**Razón:** el borrado real está descartado por `order_items.product_variant_id`
+— la tienda tiene que poder responder qué vendió en marzo mucho después de que
+el producto salga del catálogo. Dejar las variantes vivas tampoco sirve: la
+reserva de stock las resuelve por id, así que seguirían siendo pedibles con su
+producto ya archivado. Y (c) se probó y no funciona: `deleted_at` es una
+columna de precisión de segundos, así que una variante borrada en el mismo
+segundo que el producto es indistinguible de una que se llevó el archivado.
+Devolver todo es la regla que siempre se cumple, y es el lado seguro del error:
+volver a retirar una variante es un clic, mientras que una variante que falta
+en silencio es invisible.
+
+**Implicaciones técnicas:**
+- `Product::archive()` / `Product::unarchive()` llevan las dos operaciones; el
+  controlador solo decide si están permitidas.
+- Se rechaza archivar un producto con `reserved_quantity > 0` en cualquiera de
+  sus variantes: hay clientes en camino a pagar esas unidades.
+- La misma negativa protege el borrado de una variante suelta, más una segunda:
+  no se puede archivar la última variante viva de un producto, porque todo
+  producto debe tener al menos una (regla de la Fase 1). Para retirar el
+  producto entero está el archivado del producto.
+- `GET /products/{product}` y el restore resuelven con `withTrashed()`; el
+  listado esconde lo archivado salvo `?trashed=with|only`.
+- Las reglas `unique` de `slug` y `sku` cuentan las filas archivadas, igual que
+  el índice de la base: un slug libre solo a ojos de Eloquent sigue fallando en
+  el insert.
+
+---
+
+### 2026-09-01 — El generador es el único que escribe el conjunto de variantes
+
+**Decisión:** las variantes no se crean de a una con su combinación escrita a
+mano. `POST /api/admin/products/{product}/variants` recibe todas las
+combinaciones o una selección, y `VariantGenerator` decide qué crear. Crear un
+producto crea su variante implícita; generar combinaciones reales la archiva.
+Agregar una opción a un producto que ya tiene variantes con combinaciones se
+rechaza; agregar un valor a una opción existente siempre se permite.
+
+**Alternativas consideradas:** un `POST /variants` clásico donde el panel manda
+`option_value_ids`, y dejar que la validación se encargue.
+
+**Razón:** una variante no es una fila suelta, es un punto de la grilla que
+forman las opciones. Un endpoint que acepte cualquier conjunto de valores deja
+crear un punto que no está en la grilla — una variante sin talla en un producto
+con tallas — que el storefront no puede resolver a partir de lo que el cliente
+selecciona. Concentrarlo en el generador es lo que permite que la regla de la
+variante implícita ("todo producto tiene al menos una variante") sea una
+invariante y no una recomendación.
+
+**Implicaciones técnicas:**
+- Generar es idempotente: la combinación que ya existe se cuenta como omitida.
+  El `meta` de la respuesta dice `created` / `skipped` / `archived_implicit`,
+  que es lo que hace seguro volver a pulsar el botón después de agregar un
+  valor.
+- Agregar una opción se rechaza porque las variantes existentes quedarían
+  indefinidas en el eje nuevo (un "Rojo-M" que no dice nada de Material).
+  Eliminar una opción o un valor en uso se rechaza por lo contrario:
+  `variant_option_values` cascadea, así que la base no fallaría — dejaría dos
+  variantes idénticas donde antes había "Rojo" y "Azul".
+- Renombrar una opción o un valor siempre se permite: son etiquetas, y ninguna
+  identidad de variante depende de ellas.
+- El SKU se deriva del producto y de la combinación (`CAMISA-ROJO-M`) porque un
+  SKU se dicta en voz alta en un depósito; las colisiones se resuelven con
+  sufijo numérico, contando las variantes archivadas.
+- Hay un tope configurable (`commerce.catalog.max_variants_per_product`, 500)
+  para que un "generar todas" sobre cuatro opciones sea un 422 legible y no una
+  petición que se cae a la mitad.
+- Las variantes nacen con `stock = 0`: las unidades entran por un ajuste de
+  inventario, que es lo que escribe el kardex.
+
+---
+
+### 2026-09-01 — Imágenes de catálogo: disco público, no streaming como los comprobantes
+
+**Decisión:** las imágenes de producto viven en el disco `public`
+(configurable en `commerce.product_image`) y las sirve el servidor web a través
+del symlink de `storage:link`. No pasan por la API. La compresión que vivía
+dentro de `PaymentProofService` se extrajo a `ImageStorageService`, que ahora
+usan los dos.
+
+**Alternativas consideradas:** servirlas con streaming autenticado, como los
+comprobantes de pago (decisión del 2026-09-01 más arriba).
+
+**Razón:** son cosas opuestas. Un comprobante es el recibo bancario de un
+cliente y solo debe verlo un admin con sesión; una foto de producto está para
+que la vea cualquiera que entre a la tienda, y hacerla pasar por PHP en cada
+carga de la portada es gasto puro. Lo que sí comparten es cómo llega el
+archivo: una foto sacada con un teléfono, que hay que reencodear, reducir y
+guardar con un nombre que no eligió quien la subió.
+
+**Implicaciones técnicas:**
+- `ImageStorageService` es el único que escribe un archivo subido. Reencodea a
+  JPEG y reduce con `scaleDown` (que nunca amplía), y deja intacto lo que no es
+  imagen — un comprobante en PDF se destruiría si se reencodeara.
+- El nombre guardado siempre es un UUID: el nombre original es texto controlado
+  por quien sube, y conservarlo filtra cómo llamó el cliente al archivo.
+- Las imágenes se asocian al **valor de opción**, no a la variante (PRD): las
+  fotos de "Rojo" las heredan Rojo-38, Rojo-39 y Rojo-40 sin duplicarlas. Si el
+  producto no tiene una opción visual, quedan colgadas del producto.
+- Un producto tiene exactamente una imagen principal: la primera que se sube lo
+  es, marcar otra se la quita a la anterior, y borrar la principal se la pasa a
+  la siguiente. El storefront ordena por `is_primary` y luego por `position`.
+- `ProductImageResource` toma el disco de la config y no de un literal, para
+  que un despliegue pueda mover el catálogo a S3 sin tocar código.
+
+---
+
+### 2026-09-01 — El historial de tasas es de solo agregar
+
+**Decisión:** sobre `exchange_rates` el panel solo tiene `GET` y `POST`. No
+existe endpoint de edición ni de borrado, y registrar una tasa nueva
+(`ExchangeRateService::storeManual()`) siempre inserta una fila, nunca
+actualiza la anterior.
+
+**Alternativas consideradas:** un `PUT` por par que mantuviera "la tasa
+vigente" en una sola fila, con el historial como efecto secundario opcional.
+
+**Razón:** `orders.exchange_rate_applied` guarda la tasa con la que se le
+cobró a un cliente, y `exchange_rates` es el registro contra el que ese número
+se justifica. Si una fila del historial se puede reescribir, una orden que era
+correcta cuando se creó pasa a parecer equivocada, y no queda forma de
+demostrar cuál era la tasa aquel martes. Corregir una tasa mal puesta es
+registrar la buena ahora: `latestRate()` ordena por `effective_at`, así que la
+nueva entra en vigor sola.
+
+**Implicaciones técnicas:**
+- `storeManual()` es la imagen especular de `refresh()`: la manual escribe el
+  `created_by` del admin y `source = manual`; la automática deja `created_by`
+  en `null` a propósito, porque ahí no lo decidió nadie, lo reportó una fuente.
+  El historial distingue las dos con solo mirar esas dos columnas.
+- Borrar la configuración de un par (`exchange_rate_settings`) detiene la
+  automatización pero no toca las tasas ya registradas: siguen en el historial
+  y siguen justificando las órdenes que las usaron.
+- El par de un `exchange_rate_setting` tampoco se edita. Su historial de
+  refresco (`last_run_at`, `last_error_at`, `last_error`) describe el par para
+  el que corrió; apuntar la fila a otras monedas lo convertiría en una mentira.
+- Un par en modo automático exige un provider automático: apuntarlo a `manual`
+  crearía un horario sin nada que llamar, y `refresh()` lo saltaría en silencio
+  mientras el par se ve configurado.
+
+---
+
+### 2026-09-01 — El storefront lee la identidad de la tienda de la API
+
+**Decisión:** existe `GET /api/store`, público y sin sesión, con nombre, logo,
+colores, número de WhatsApp y moneda base. Cierra la pregunta que la Fase 5d
+dejaba abierta sobre si el theming seguía siendo estático.
+
+**Alternativas consideradas:** mantener el theming de la Fase 2 — colores y
+nombre compilados en el frontend, cambiados por despliegue.
+
+**Razón:** era razonable mientras nada podía cambiarlos. Ahora el panel puede,
+y un frontend estático quedaría viejo en el momento en que un dueño renombra la
+tienda o sube un logo. Además la Fase 7 trata justamente de configurar una
+instancia nueva sin tocar código: si el nombre y el logo siguen siendo un
+`build`, ese flujo no existe.
+
+**Implicaciones técnicas:**
+- Es deliberadamente más estrecho que el recurso de admin: sin ids de monedas
+  habilitadas, sin salud de tasas, sin timestamps. Todo lo que devuelve ya está
+  impreso en la página.
+- Las tasas y las monedas habilitadas siguen viniendo de `GET /api/currencies`,
+  que ya existía y ya resuelve la tasa de cada una.
+- El logo se sirve por el disco público (symlink de `storage:link`), igual que
+  las imágenes de catálogo y por la misma razón: es algo que debe ver
+  cualquiera que entre a la tienda.
+
+---
+
+### 2026-09-01 — Los campos de cuenta de cada método de pago se declaran una vez
+
+**Decisión:** `PaymentMethodType::instructionFields()` es la única lista de qué
+datos de cuenta tiene cada método. La leen el provider (para armar lo que ve el
+cliente), el request de admin (para validar lo que se guarda) y el panel (para
+dibujar el formulario, vía `GET /api/admin/payment-method-types`). Además, el
+tipo de un método de pago no se puede cambiar, y un método con órdenes no se
+elimina: se desactiva.
+
+**Alternativas consideradas:** dejar `instructions` como un JSON totalmente
+libre y validar solo que sean strings; o declarar la lista de campos en el
+request de admin, aparte de la que ya tenía cada provider.
+
+**Razón:** un JSON libre deja guardar `bank_code` en un Zelle, que se
+almacenaría y no se le mostraría nunca a nadie — un dato de cuenta que el admin
+cree publicado y no lo está. Y declarar la lista dos veces garantiza que se
+separen: el formulario pediría un campo que el provider no lee. Al subirla al
+enum, los cuatro providers dejaron de repetirla y `accountDetails()` pasó a ser
+concreto en `ManualPaymentProvider`.
+
+**Implicaciones técnicas:**
+- `notes` se acepta además de los campos del tipo, porque
+  `ManualPaymentProvider::getInstructions()` lo pasa al cliente para todos.
+- Editar `instructions` reemplaza el blob entero, no lo mezcla: con un merge,
+  un campo vaciado sería indistinguible de uno ausente, y borrar un número de
+  cuenta viejo tiene que ser posible.
+- El tipo es inmutable porque decide el provider, los campos de cuenta y si el
+  método pide comprobante. Cambiarlo reinterpretaría el JSON guardado como los
+  campos de otro método, y las órdenes ya pagadas con él describirían una
+  cuenta que nunca se publicó.
+- `orders.payment_method_id` es `nullOnDelete`: borrar un método usado no
+  fallaría, borraría en silencio cómo se pagaron esas órdenes. Es la misma
+  razón por la que las cuentas de admin se desactivan y no se borran.
+- La coherencia entre monedas y métodos se valida por los dos lados: no se
+  deshabilita una moneda que cobra un método activo, ni se crea un método que
+  cobre en una moneda deshabilitada.

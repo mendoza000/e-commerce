@@ -34,6 +34,7 @@ class DatabaseSeeder extends Seeder
             ExchangeRateSettingSeeder::class,
             ExchangeRateSeeder::class,
             StoreSettingSeeder::class,
+            PaymentMethodSeeder::class,
             CategorySeeder::class,
             ProductSeeder::class,
             CustomerSeeder::class,

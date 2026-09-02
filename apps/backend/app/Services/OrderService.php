@@ -3,11 +3,10 @@
 namespace App\Services;
 
 use App\Domain\Enums\OrderStatus;
-use App\Models\Currency;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\OrderItem;
-use App\Models\OrderStatusHistory;
+use App\Models\PaymentMethod;
 use App\Models\ProductVariant;
 use App\Models\StoreSetting;
 use Illuminate\Support\Facades\DB;
@@ -47,7 +46,10 @@ class OrderService
             $store = StoreSetting::current();
             $baseCurrency = $store->baseCurrency;
 
-            $paymentCurrency = Currency::query()->findOrFail($validated['payment_currency_id']);
+            // The client picks a payment *method*; its currency is what the
+            // order gets frozen in, so the two can never disagree.
+            $paymentMethod = PaymentMethod::query()->with('currency')->findOrFail($validated['payment_method_id']);
+            $paymentCurrency = $paymentMethod->currency;
 
             $baseAmount = '0';
 
@@ -64,7 +66,7 @@ class OrderService
 
                 if ($rate === null) {
                     throw ValidationException::withMessages([
-                        'payment_currency_id' => ['No hay una tasa de cambio disponible para la moneda seleccionada.'],
+                        'payment_method_id' => ['No hay una tasa de cambio disponible para la moneda de este método de pago.'],
                     ]);
                 }
 
@@ -90,6 +92,7 @@ class OrderService
                 'payment_currency_id' => $paymentCurrency->id,
                 'exchange_rate_applied' => $exchangeRateApplied,
                 'payment_amount' => $paymentAmount,
+                'payment_method_id' => $paymentMethod->id,
                 'reservation_expires_at' => now()->addMinutes((int) config('commerce.reservation_minutes')),
             ]);
 
@@ -114,15 +117,19 @@ class OrderService
 
             $this->reservations->reserve($order, $lockedVariants, $quantitiesByVariantId);
 
-            OrderStatusHistory::create([
-                'order_id' => $order->id,
+            // Opening entry of the audit trail. Every later change goes through
+            // Order::transitionTo, which writes its own history row.
+            $order->statusHistory()->create([
                 'from_status' => null,
                 'to_status' => OrderStatus::PendingPayment->value,
                 'changed_by' => null,
                 'reason' => null,
             ]);
 
-            return $order->load(['items', 'baseCurrency', 'paymentCurrency', 'state', 'municipality', 'parish']);
+            return $order->load([
+                'items', 'baseCurrency', 'paymentCurrency', 'state', 'municipality', 'parish',
+                'paymentMethod.currency',
+            ]);
         });
     }
 

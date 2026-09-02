@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Models\User;
 use App\Services\InventoryReservationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
@@ -157,5 +158,140 @@ class InventoryReservationServiceTest extends TestCase
         $this->service->release($order, 'Reservation expired.');
 
         $this->assertSame(0, $variant->fresh()->reserved_quantity);
+    }
+
+    public function test_commit_turns_the_reservation_into_a_definitive_stock_deduction(): void
+    {
+        $variant = ProductVariant::factory()->create(['stock' => 10, 'reserved_quantity' => 4]);
+
+        $order = Order::factory()->create();
+        OrderItem::factory()->create([
+            'order_id' => $order->id,
+            'product_variant_id' => $variant->id,
+            'sku' => $variant->sku,
+            'quantity' => 4,
+        ]);
+
+        $this->service->commit($order);
+
+        $variant->refresh();
+
+        $this->assertSame(6, $variant->stock);
+        $this->assertSame(0, $variant->reserved_quantity);
+    }
+
+    public function test_commit_records_a_sale_movement_attributed_to_the_admin(): void
+    {
+        $admin = User::factory()->create();
+        $variant = ProductVariant::factory()->create(['stock' => 10, 'reserved_quantity' => 3]);
+
+        $order = Order::factory()->create();
+        OrderItem::factory()->create([
+            'order_id' => $order->id,
+            'product_variant_id' => $variant->id,
+            'sku' => $variant->sku,
+            'quantity' => 3,
+        ]);
+
+        $this->service->commit($order, $admin);
+
+        $movement = InventoryMovement::query()
+            ->where('product_variant_id', $variant->id)
+            ->where('type', InventoryMovementType::Sale)
+            ->firstOrFail();
+
+        $this->assertSame(-3, $movement->quantity_change);
+        $this->assertSame($admin->id, $movement->created_by);
+        $this->assertSame($order->id, $movement->order_id);
+    }
+
+    public function test_commit_clamps_both_counters_at_zero(): void
+    {
+        // Stock adjusted out of band between reservation and confirmation.
+        $variant = ProductVariant::factory()->create(['stock' => 1, 'reserved_quantity' => 1]);
+
+        $order = Order::factory()->create();
+        OrderItem::factory()->create([
+            'order_id' => $order->id,
+            'product_variant_id' => $variant->id,
+            'sku' => $variant->sku,
+            'quantity' => 5,
+        ]);
+
+        $this->service->commit($order);
+
+        $variant->refresh();
+
+        $this->assertSame(0, $variant->stock);
+        $this->assertSame(0, $variant->reserved_quantity);
+    }
+
+    public function test_restock_puts_the_units_back_and_leaves_reservations_alone(): void
+    {
+        // What a paid order looks like: committed, so nothing is reserved.
+        $variant = ProductVariant::factory()->create(['stock' => 6, 'reserved_quantity' => 2]);
+
+        $order = Order::factory()->create();
+        OrderItem::factory()->create([
+            'order_id' => $order->id,
+            'product_variant_id' => $variant->id,
+            'sku' => $variant->sku,
+            'quantity' => 4,
+        ]);
+
+        $this->service->restock($order, 'Orden cancelada.');
+
+        $variant->refresh();
+
+        $this->assertSame(10, $variant->stock);
+        // The 2 reserved units belong to somebody else's order.
+        $this->assertSame(2, $variant->reserved_quantity);
+    }
+
+    public function test_restock_records_the_movement_attributed_to_the_admin(): void
+    {
+        $admin = User::factory()->create();
+        $variant = ProductVariant::factory()->create(['stock' => 6, 'reserved_quantity' => 0]);
+
+        $order = Order::factory()->create();
+        OrderItem::factory()->create([
+            'order_id' => $order->id,
+            'product_variant_id' => $variant->id,
+            'sku' => $variant->sku,
+            'quantity' => 4,
+        ]);
+
+        $this->service->restock($order, 'Orden cancelada.', $admin);
+
+        $movement = InventoryMovement::query()
+            ->where('type', InventoryMovementType::Restock)
+            ->firstOrFail();
+
+        $this->assertSame(4, $movement->quantity_change);
+        $this->assertSame('Orden cancelada.', $movement->reason);
+        $this->assertSame($order->id, $movement->order_id);
+        $this->assertSame($admin->id, $movement->created_by);
+    }
+
+    public function test_release_can_be_attributed_to_the_admin_who_cancelled(): void
+    {
+        $admin = User::factory()->create();
+        $variant = ProductVariant::factory()->create(['stock' => 10, 'reserved_quantity' => 5]);
+
+        $order = Order::factory()->create();
+        OrderItem::factory()->create([
+            'order_id' => $order->id,
+            'product_variant_id' => $variant->id,
+            'sku' => $variant->sku,
+            'quantity' => 5,
+        ]);
+
+        $this->service->release($order, 'Cancelada por el administrador.', $admin);
+
+        $movement = InventoryMovement::query()
+            ->where('type', InventoryMovementType::Release)
+            ->firstOrFail();
+
+        $this->assertSame($admin->id, $movement->created_by);
     }
 }
