@@ -5,7 +5,9 @@ namespace App\Services;
 use App\Domain\Enums\InventoryMovementType;
 use App\Models\InventoryMovement;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\ProductVariant;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -103,6 +105,54 @@ class InventoryReservationService
     }
 
     /**
+     * Turns an order's reservation into a definitive sale (PRD 5quater, step
+     * 2): the units leave `stock` for good and stop being counted as reserved,
+     * with one Sale movement per line for the kardex.
+     *
+     * Must be called inside an already-open transaction, from
+     * Order::confirmPayment, which holds the order's row lock. Follows the same
+     * ascending-lock discipline as lockVariantsForOrder.
+     */
+    public function commit(Order $order, ?User $admin = null): void
+    {
+        $items = $order->items()->orderBy('product_variant_id')->get();
+
+        $variants = $this->lockVariantsOf($items);
+
+        if ($variants === null) {
+            return;
+        }
+
+        foreach ($items as $item) {
+            if ($variants->get($item->product_variant_id) === null) {
+                continue;
+            }
+
+            $quantity = (int) $item->quantity;
+
+            // Both counters move in one statement so stock and reserved_quantity
+            // can never be observed out of step. The clamps are defensive: an
+            // out-of-band manual adjustment must not push either negative.
+            ProductVariant::query()
+                ->whereKey($item->product_variant_id)
+                ->update([
+                    'stock' => DB::raw("GREATEST(stock - {$quantity}, 0)"),
+                    'reserved_quantity' => DB::raw("GREATEST(reserved_quantity - {$quantity}, 0)"),
+                ]);
+
+            InventoryMovement::create([
+                'product_variant_id' => $item->product_variant_id,
+                'sku' => $item->sku,
+                'type' => InventoryMovementType::Sale,
+                'quantity_change' => -$quantity,
+                'reason' => 'Pago confirmado.',
+                'order_id' => $order->id,
+                'created_by' => $admin?->id,
+            ]);
+        }
+    }
+
+    /**
      * Releases the stock reserved by an order's items (e.g. because its
      * reservation expired) and records one Release movement per line.
      * Follows the same ascending-lock discipline as lockVariantsForOrder.
@@ -111,18 +161,11 @@ class InventoryReservationService
     {
         $items = $order->items()->orderBy('product_variant_id')->get();
 
-        $variantIds = $items->pluck('product_variant_id')->filter()->unique()->values()->all();
+        $variants = $this->lockVariantsOf($items);
 
-        if ($variantIds === []) {
+        if ($variants === null) {
             return;
         }
-
-        $variants = ProductVariant::query()
-            ->whereIn('id', $variantIds)
-            ->orderBy('id')
-            ->lockForUpdate()
-            ->get()
-            ->keyBy('id');
 
         foreach ($items as $item) {
             $variant = $variants->get($item->product_variant_id);
@@ -149,5 +192,28 @@ class InventoryReservationService
                 'created_by' => null,
             ]);
         }
+    }
+
+    /**
+     * Locks the variants behind a set of order items, in ascending id order.
+     * Returns null when the order has no variants left to touch.
+     *
+     * @param  Collection<int, OrderItem>  $items
+     * @return Collection<int, ProductVariant>|null Locked variants keyed by id.
+     */
+    private function lockVariantsOf(Collection $items): ?Collection
+    {
+        $variantIds = $items->pluck('product_variant_id')->filter()->unique()->values()->all();
+
+        if ($variantIds === []) {
+            return null;
+        }
+
+        return ProductVariant::query()
+            ->whereIn('id', $variantIds)
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get()
+            ->keyBy('id');
     }
 }

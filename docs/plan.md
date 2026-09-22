@@ -13,21 +13,21 @@
 **Objetivo:** tener el esqueleto del proyecto corriendo localmente con Docker,
 sin lógica de negocio todavía.
 
-- [ ] Crear estructura de carpetas del monorepo (`/apps/backend`, `/apps/frontend`, `/docker`, `/docs`)
-- [ ] Inicializar repo Git, `.gitignore` general (Laravel + Node + Docker)
-- [ ] Instalar Laravel limpio en `/apps/backend` (API-only, sin Breeze/Jetstream)
-- [ ] Instalar Next.js (App Router + TypeScript + Tailwind) en `/apps/frontend` usando Bun (`bun create next-app` o instalación manual + `bun install`)
-- [ ] Base de datos: **PostgreSQL** (decisión tomada, documentar en `docs/decisions.md`)
-- [ ] Admin: **embebido en el mismo Next.js** bajo rutas `/admin/*` (decisión tomada, documentar en `docs/decisions.md`)
-- [ ] Gestor de paquetes frontend: **Bun** (decisión tomada, documentar en `docs/decisions.md` — usar imagen base `oven/bun` en el Dockerfile del frontend en vez de `node`)
-- [ ] Crear `docker-compose.yml` con servicios: `backend`, `frontend`, `db`, `redis` (para colas/cache)
-- [ ] Crear `Dockerfile` para backend (PHP-FPM + Nginx o usar `php artisan serve` en dev)
-- [ ] Crear `Dockerfile` para frontend usando imagen base `oven/bun` (multi-stage build: `bun install` → `bun run build` → runtime standalone de Next.js)
+- [x] Crear estructura de carpetas del monorepo (`/apps/backend`, `/apps/frontend`, `/docker`, `/docs`)
+- [x] Inicializar repo Git, `.gitignore` general (Laravel + Node + Docker)
+- [x] Instalar Laravel limpio en `/apps/backend` (API-only, sin Breeze/Jetstream)
+- [x] Instalar Next.js (App Router + TypeScript + Tailwind) en `/apps/frontend` usando Bun (`bun create next-app` o instalación manual + `bun install`)
+- [x] Base de datos: **PostgreSQL** (decisión tomada, documentar en `docs/decisions.md`)
+- [x] Admin: **embebido en el mismo Next.js** bajo rutas `/admin/*` (decisión tomada, documentar en `docs/decisions.md`)
+- [x] Gestor de paquetes frontend: **Bun** (decisión tomada, documentar en `docs/decisions.md` — usar imagen base `oven/bun` en el Dockerfile del frontend en vez de `node`)
+- [x] Crear `docker-compose.yml` con servicios: `backend`, `frontend`, `db`, `redis` (para colas/cache)
+- [x] Crear `Dockerfile` para backend (PHP-FPM + Nginx o usar `php artisan serve` en dev)
+- [x] Crear `Dockerfile` para frontend usando imagen base `oven/bun` (multi-stage build: `bun install` → `bun run build` → runtime standalone de Next.js)
 - [ ] Configurar `.env.example` en backend y frontend con todas las variables previstas (aunque no se usen todas aún)
-- [ ] Verificar que `docker-compose up` levanta los 3-4 servicios sin errores
-- [ ] Verificar conectividad backend → base de datos (migración de prueba)
-- [ ] Verificar que frontend puede hacer un fetch de prueba al backend (endpoint `/api/health`)
-- [ ] Documentar en `README.md` cómo levantar el entorno local desde cero
+- [x] Verificar que `docker-compose up` levanta los 3-4 servicios sin errores
+- [x] Verificar conectividad backend → base de datos (migración de prueba)
+- [x] Verificar que frontend puede hacer un fetch de prueba al backend (endpoint `/api/health`)
+- [x] Documentar en `README.md` cómo levantar el entorno local desde cero
 
 **Entregable de fase:** `docker-compose up` levanta todo, endpoint de salud responde, sin features de negocio aún.
 
@@ -63,22 +63,22 @@ sin lógica de negocio todavía.
 
 **Objetivo:** primer flujo end-to-end visible: productos del backend renderizados en el frontend.
 
-- [ ] Endpoint `GET /api/products` (listado con paginación y filtros básicos: categoría, búsqueda)
-- [ ] Endpoint `GET /api/products/{slug}` (detalle de producto con opciones, valores, variantes e imágenes asociadas por valor de opción)
-- [ ] Endpoint `GET /api/categories`
-- [ ] Endpoint `GET /api/currencies` (monedas habilitadas por la tienda + tasa de cambio vigente)
-- [ ] Formato de respuesta consistente (API Resources de Laravel, no exponer modelos crudos)
-- [ ] Manejo de errores estandarizado (formato JSON consistente para 404/422/500)
-- [ ] Configurar CORS para permitir requests del frontend
-- [ ] Crear capa de servicios en Next.js para consumir la API (`/lib/api/products.ts`)
-- [ ] Página de listado de productos (storefront)
-- [ ] Página de detalle de producto
-- [ ] Selector de variantes en la página de detalle (por opción: ej. botones de color, dropdown de talla) que actualice precio, stock disponible e imágenes mostradas según la combinación seleccionada
-- [ ] Deshabilitar en el selector las combinaciones de variante sin stock disponible (no permitir agregar al carrito una variante agotada — sin backorder, ver `PRD.md` sección 5quater)
-- [ ] Selector de moneda de visualización (si la tienda tiene más de una habilitada) que recalcule los precios mostrados con la tasa vigente
-- [ ] Componente de tarjeta de producto reutilizable
-- [ ] Manejo de estados de carga/error en el frontend
-- [ ] Definir sistema de theming inicial (variables CSS/Tailwind config) para personalización por cliente
+- [x] Endpoint `GET /api/products` (listado con paginación y filtros básicos: categoría, búsqueda)
+- [x] Endpoint `GET /api/products/{slug}` (detalle de producto con opciones, valores, variantes e imágenes asociadas por valor de opción)
+- [x] Endpoint `GET /api/categories`
+- [x] Endpoint `GET /api/currencies` (monedas habilitadas por la tienda + tasa de cambio vigente)
+- [x] Formato de respuesta consistente (API Resources de Laravel, no exponer modelos crudos)
+- [x] Manejo de errores estandarizado (formato JSON consistente para 404/422/500)
+- [x] Configurar CORS para permitir requests del frontend
+- [x] Crear capa de servicios en Next.js para consumir la API (`/lib/api/products.ts`)
+- [x] Página de listado de productos (storefront)
+- [x] Página de detalle de producto
+- [x] Selector de variantes en la página de detalle (por opción: ej. botones de color, dropdown de talla) que actualice precio, stock disponible e imágenes mostradas según la combinación seleccionada
+- [x] Deshabilitar en el selector las combinaciones de variante sin stock disponible (no permitir agregar al carrito una variante agotada — sin backorder, ver `PRD.md` sección 5quater)
+- [x] Selector de moneda de visualización (si la tienda tiene más de una habilitada) que recalcule los precios mostrados con la tasa vigente
+- [x] Componente de tarjeta de producto reutilizable
+- [x] Manejo de estados de carga/error en el frontend
+- [x] Definir sistema de theming inicial (variables CSS/Tailwind config) para personalización por cliente
 
 **Entregable de fase:** storefront público navegable mostrando productos reales desde el backend, con precios en la moneda elegida.
 
@@ -88,18 +88,18 @@ sin lógica de negocio todavía.
 
 **Objetivo:** flujo de compra completo hasta creación de orden, con pago pendiente.
 
-- [ ] Implementar estado de carrito en frontend (Zustand o Context) persistido en localStorage
-- [ ] UI de carrito (agregar, quitar, actualizar cantidad, ver totales)
-- [ ] Endpoint `POST /api/orders` (crear orden en estado `pending_payment`) con validación de stock
-- [ ] Reserva temporal de inventario al crear la orden (ventana configurable, ej. 30-60 min — ver `PRD.md` sección 12), implementada con transacción de base de datos + bloqueo de fila (`SELECT ... FOR UPDATE`) para evitar sobreventa por concurrencia
-- [ ] Registrar movimiento de tipo "reserva" en `inventory_movements` al crear la orden
-- [ ] Job programado que libera la reserva si expira sin pago (actualiza stock disponible y registra movimiento de "liberación" en `inventory_movements`)
-- [ ] Congelar tasa de cambio y moneda base/pago al crear la orden (no recalcular después)
-- [ ] Endpoints `GET /api/locations/states`, `GET /api/locations/municipalities?state_id=`, `GET /api/locations/parishes?municipality_id=` para los selects dependientes de dirección
-- [ ] Formulario de checkout: datos de envío (Estado/Municipio/Parroquia + referencia libre), datos de cliente (nombre, teléfono +58, tipo/número de documento), o checkout como invitado
-- [ ] Página de "orden creada" con resumen y siguiente paso (ir a pagar)
-- [ ] Endpoint `GET /api/orders/{id}` para que el cliente consulte su orden
-- [ ] Manejo de expiración de órdenes no pagadas (job programado que cancela y libera stock — mismo mecanismo que la reserva de inventario)
+- [x] Implementar estado de carrito en frontend (Zustand o Context) persistido en localStorage
+- [x] UI de carrito (agregar, quitar, actualizar cantidad, ver totales)
+- [x] Endpoint `POST /api/orders` (crear orden en estado `pending_payment`) con validación de stock
+- [x] Reserva temporal de inventario al crear la orden (ventana configurable, ej. 30-60 min — ver `PRD.md` sección 12), implementada con transacción de base de datos + bloqueo de fila (`SELECT ... FOR UPDATE`) para evitar sobreventa por concurrencia
+- [x] Registrar movimiento de tipo "reserva" en `inventory_movements` al crear la orden
+- [x] Job programado que libera la reserva si expira sin pago (actualiza stock disponible y registra movimiento de "liberación" en `inventory_movements`)
+- [x] Congelar tasa de cambio y moneda base/pago al crear la orden (no recalcular después)
+- [x] Endpoints `GET /api/locations/states`, `GET /api/locations/municipalities?state_id=`, `GET /api/locations/parishes?municipality_id=` para los selects dependientes de dirección
+- [x] Formulario de checkout: datos de envío (Estado/Municipio/Parroquia + referencia libre), datos de cliente (nombre, teléfono +58, tipo/número de documento), o checkout como invitado
+- [x] Página de "orden creada" con resumen y siguiente paso (ir a pagar)
+- [x] Endpoint `GET /api/orders/{id}` para que el cliente consulte su orden
+- [x] Manejo de expiración de órdenes no pagadas (job programado que cancela y libera stock — mismo mecanismo que la reserva de inventario)
 
 **Entregable de fase:** un usuario puede armar carrito, hacer checkout con dirección real venezolana, y queda una orden creada en base de datos con estado pendiente de pago y tasa congelada.
 
@@ -109,24 +109,38 @@ sin lógica de negocio todavía.
 
 **Objetivo:** implementar la pieza más específica del contexto venezolano.
 
-- [ ] Definir interfaz `PaymentProviderInterface` (incluye `getCurrency()`) en el backend
-- [ ] Implementar `PagoMovilProvider` (Bs), `ZelleProvider` (USD), `TransferenciaNacionalProvider` (Bs), `EfectivoContraEntregaProvider` (moneda configurable)
-- [ ] Definir interfaz `ExchangeRateProviderInterface` (`getRate`, `getSourceName`) — ver `PRD.md` sección 8bis
-- [ ] Implementar `ManualRateProvider` y `CriptoYaRateProvider` (consulta `https://criptoya.com/api/binancep2p/{par}/{monto}` con monto configurable)
-- [ ] Job programado (Laravel Scheduler) que ejecuta los providers automáticos según la frecuencia configurada por par y guarda el resultado en `exchange_rates`
-- [ ] Manejo de fallo del provider automático: no romper el checkout, mantener la última tasa válida, registrar el incidente (log) para revisión del admin
-- [ ] Tabla/config de `payment_methods` editable desde admin (habilitar/deshabilitar, datos de cuenta, moneda asociada)
-- [ ] Endpoint `GET /api/payment-methods` (métodos activos con sus instrucciones y moneda, para mostrar en checkout)
-- [ ] Endpoint `POST /api/orders/{id}/payment-proof` (subida de comprobante — imagen/PDF)
-- [ ] Configurar almacenamiento de archivos (local en dev, definir estrategia para prod) con compresión de imágenes al subir
-- [ ] Validaciones de archivo (tipo, tamaño máximo)
+- [x] Definir interfaz `PaymentProviderInterface` (incluye `getCurrency()`) en el backend
+- [x] Implementar `PagoMovilProvider` (Bs), `ZelleProvider` (USD), `TransferenciaNacionalProvider` (Bs), `EfectivoContraEntregaProvider` (moneda configurable)
+- [x] Definir interfaz `ExchangeRateProviderInterface` (`getRate`, `getSourceName`) — ver `PRD.md` sección 8bis
+- [x] Implementar `ManualRateProvider` y `CriptoYaRateProvider` (consulta `https://criptoya.com/api/binancep2p/{par}/{monto}` con monto configurable)
+- [x] Job programado (Laravel Scheduler) que ejecuta los providers automáticos según la frecuencia configurada por par y guarda el resultado en `exchange_rates`
+- [x] Manejo de fallo del provider automático: no romper el checkout, mantener la última tasa válida, registrar el incidente (log) para revisión del admin
+- [x] Tabla/config de `payment_methods` editable desde admin (habilitar/deshabilitar, datos de cuenta, moneda asociada) — modelo, seeder y providers listos; el CRUD de admin es Fase 5
+- [x] Endpoint `GET /api/payment-methods` (métodos activos con sus instrucciones y moneda, para mostrar en checkout)
+- [x] Endpoint `POST /api/orders/{id}/payment-proof` (subida de comprobante — imagen/PDF)
+- [x] Configurar almacenamiento de archivos (local en dev, definir estrategia para prod) con compresión de imágenes al subir
+- [x] Validaciones de archivo (tipo, tamaño máximo)
 - [ ] UI de checkout: selección de método de pago + instrucciones dinámicas según el método (mostrando el monto ya convertido a la moneda de ese método)
 - [ ] UI de subida de comprobante post-checkout
-- [ ] Estado de orden se actualiza a `payment_submitted` al subir comprobante
-- [ ] Al confirmar el pago (acción de admin en Fase 5), convertir la reserva en descuento definitivo de stock y registrar movimiento de tipo "venta" en `inventory_movements`
-- [ ] Notificación al admin cuando llega un nuevo comprobante (email y/o link de WhatsApp, vía cola)
+- [x] Estado de orden se actualiza a `payment_submitted` al subir comprobante
+- [x] Al confirmar el pago (acción de admin en Fase 5), convertir la reserva en descuento definitivo de stock y registrar movimiento de tipo "venta" en `inventory_movements` — `Order::confirmPayment()` implementado y testeado; el endpoint admin que lo dispara queda para Fase 5
+- [x] Notificación al admin cuando llega un nuevo comprobante (email y/o link de WhatsApp, vía cola)
 
 **Entregable de fase:** cliente puede elegir método de pago, ver instrucciones en la moneda correcta, subir comprobante, y la orden refleja ese estado.
+
+### Decisiones tomadas durante la Fase 4 (backend)
+
+- El checkout pasó de recibir `payment_currency_id` a recibir `payment_method_id`:
+  la moneda de pago se deriva del método elegido, de modo que una orden nunca
+  puede quedar congelada en una moneda distinta a la que realmente se cobra.
+  **Rompe el contrato de la Fase 3 — el formulario de checkout del frontend debe
+  actualizarse.**
+- Al subir un comprobante la reserva de inventario no se vuelve eterna: se
+  extiende `commerce.payment_review_minutes` (72 h por defecto) y el barrido
+  programado también cubre las órdenes en `payment_submitted`.
+- Los payment/exchange-rate providers viven en `app/Domain/Payments` y
+  `app/Domain/ExchangeRates`, no en `app/Providers` (reservado por Laravel para
+  los Service Providers).
 
 ---
 

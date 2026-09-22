@@ -6,6 +6,7 @@ use App\Models\Currency;
 use App\Models\Customer;
 use App\Models\Municipality;
 use App\Models\Parish;
+use App\Models\PaymentMethod;
 use App\Models\ProductVariant;
 use App\Models\State;
 use App\Models\StoreSetting;
@@ -18,6 +19,8 @@ class OrdersShowTest extends TestCase
 
     private Currency $usd;
 
+    private PaymentMethod $usdMethod;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -29,6 +32,8 @@ class OrdersShowTest extends TestCase
             'base_currency_id' => $this->usd->id,
         ]);
         $store->enabledCurrencies()->sync([$this->usd->id]);
+
+        $this->usdMethod = PaymentMethod::factory()->zelle()->create(['currency_id' => $this->usd->id]);
     }
 
     private function makeAddress(): array
@@ -54,7 +59,7 @@ class OrdersShowTest extends TestCase
             'document_type' => 'V',
             'document_number' => '12345678',
             'address_reference' => 'Cerca de la plaza',
-            'payment_currency_id' => $this->usd->id,
+            'payment_method_id' => $this->usdMethod->id,
             'items' => [['product_variant_id' => $variant->id, 'quantity' => 1]],
         ], $this->makeAddress());
 

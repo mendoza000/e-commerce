@@ -35,4 +35,16 @@ return [
         ],
     ],
 
+    /*
+    | CriptoYa is only ever called by the scheduled exchange-rates:refresh
+    | command — never during checkout, which reads the last stored rate. See
+    | App\Domain\ExchangeRates\Providers\CriptoYaRateProvider.
+    */
+    'criptoya' => [
+        'base_url' => env('CRIPTOYA_BASE_URL', 'https://criptoya.com/api'),
+        'exchange' => env('CRIPTOYA_EXCHANGE', 'binancep2p'),
+        'timeout' => (int) env('CRIPTOYA_TIMEOUT', 8),
+        'retries' => (int) env('CRIPTOYA_RETRIES', 2),
+    ],
+
 ];
