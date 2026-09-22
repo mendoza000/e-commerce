@@ -38,6 +38,41 @@ export interface OrderCurrencyRef {
   symbol: string;
 }
 
+export interface OrderPaymentMethodCurrencyRef {
+  id: number;
+  code: string;
+  symbol: string;
+  decimal_places: number;
+}
+
+export interface OrderPaymentMethod {
+  id: number;
+  type: string;
+  label: string;
+  requires_proof: boolean;
+  currency: OrderPaymentMethodCurrencyRef;
+}
+
+export interface OrderPaymentProof {
+  original_name: string;
+  mime_type: string;
+  size_bytes: number;
+  reference: string | null;
+  submitted_at: string | null;
+}
+
+export interface OrderFulfillmentMethod {
+  id: number;
+  type: string;
+  label: string;
+}
+
+export interface OrderShipping {
+  courier: string | null;
+  tracking_code: string | null;
+  note: string | null;
+}
+
 export interface Order {
   order_number: string;
   status: OrderStatus;
@@ -51,6 +86,12 @@ export interface Order {
   base_amount: string;
   exchange_rate_applied: string;
   payment_amount: string;
+  payment_method: OrderPaymentMethod;
+  payment_instructions: Record<string, string>;
+  payment_proof: OrderPaymentProof | null;
+  fulfillment_method: OrderFulfillmentMethod | null;
+  shipping_amount: string | null;
+  shipping: OrderShipping;
   items: OrderItem[];
   reservation_expires_at: string | null;
   created_at: string;
@@ -61,7 +102,12 @@ export interface CreateOrderItemPayload {
   quantity: number;
 }
 
-/** Flat payload — mirrors OrderStoreRequest's field names exactly, no nested objects. */
+/**
+ * Flat payload — mirrors OrderStoreRequest's field names exactly, no nested
+ * objects. `fulfillment_method_id` is validated as `nullable` (not
+ * `sometimes`) on the backend, so an absent key is equivalent to an explicit
+ * `null`; callers can simply omit it until the fulfillment picker (M2) exists.
+ */
 export interface CreateOrderPayload {
   items: CreateOrderItemPayload[];
   customer_name: string;
@@ -72,7 +118,8 @@ export interface CreateOrderPayload {
   municipality_id: number;
   parish_id: number;
   address_reference: string;
-  payment_currency_id: number;
+  payment_method_id: number;
+  fulfillment_method_id?: number | null;
 }
 
 export async function createOrder(payload: CreateOrderPayload): Promise<Order> {

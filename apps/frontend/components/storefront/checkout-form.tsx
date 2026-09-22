@@ -14,7 +14,9 @@ import { checkoutSchema, type CheckoutFormValues } from "@/lib/schemas/checkout"
 import { createOrder, type CreateOrderPayload } from "@/lib/api/orders";
 import { ApiError, type ApiErrorBody } from "@/lib/api/client";
 import type { State } from "@/lib/api/locations";
+import type { PaymentMethod } from "@/lib/api/payment-methods";
 import { AddressSelects } from "@/components/storefront/address-selects";
+import { PaymentMethodPicker } from "@/components/storefront/payment-method-picker";
 import {
   Form,
   FormControl,
@@ -38,9 +40,16 @@ const BACKEND_TO_FORM_FIELD: Record<string, keyof CheckoutFormValues> = {
   municipality_id: "municipalityId",
   parish_id: "parishId",
   address_reference: "addressReference",
+  payment_method_id: "paymentMethodId",
 };
 
-export function CheckoutForm({ initialStates }: { initialStates: State[] }) {
+export function CheckoutForm({
+  initialStates,
+  paymentMethods,
+}: {
+  initialStates: State[];
+  paymentMethods: PaymentMethod[];
+}) {
   const router = useRouter();
   const hydrated = useCartHydrated();
   const items = useCartStore((state) => state.items);
@@ -62,6 +71,7 @@ export function CheckoutForm({ initialStates }: { initialStates: State[] }) {
       municipalityId: "",
       parishId: "",
       addressReference: "",
+      paymentMethodId: "",
     },
   });
 
@@ -107,7 +117,7 @@ export function CheckoutForm({ initialStates }: { initialStates: State[] }) {
         municipality_id: Number(values.municipalityId),
         parish_id: Number(values.parishId),
         address_reference: values.addressReference,
-        payment_currency_id: currency.id,
+        payment_method_id: Number(values.paymentMethodId),
       };
 
       const order = await createOrder(payload);
@@ -251,6 +261,8 @@ export function CheckoutForm({ initialStates }: { initialStates: State[] }) {
               </FormItem>
             )}
           />
+
+          <PaymentMethodPicker form={form} paymentMethods={paymentMethods} />
 
           {submitError ? (
             <p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
