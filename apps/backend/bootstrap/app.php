@@ -11,6 +11,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Validation\ValidationException;
+use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
@@ -21,18 +22,19 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
         then: function (): void {
-            Route::middleware('api')
+            // Sanctum SPA mode only applies here, not to the base `api`
+            // group: routes/api.php serves guest checkout and the bearer-token
+            // customer account, which must never be asked for a CSRF token.
+            // Scoping `statefulApi()`-equivalent middleware to just this group
+            // is what keeps those two designs from colliding on the same
+            // frontend origin (see docs/decisions.md).
+            Route::middleware(['api', EnsureFrontendRequestsAreStateful::class])
                 ->prefix('api/admin')
                 ->name('admin.')
                 ->group(base_path('routes/admin.php'));
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        // Sanctum SPA mode: requests from the configured stateful domains get
-        // the session cookie + CSRF treatment, so the admin panel authenticates
-        // with a first-party session instead of a bearer token.
-        $middleware->statefulApi();
-
         $middleware->alias([
             'role' => EnsureUserHasRole::class,
             'active' => EnsureUserIsActive::class,
