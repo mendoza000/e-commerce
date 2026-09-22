@@ -18,7 +18,7 @@ export default async function OrderPage({ params, searchParams }: OrderPageProps
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <OrderSummary order={order} />
+      <OrderSummary order={order} documentNumber={document_number} />
     </div>
   );
 }

@@ -18,6 +18,7 @@ export const checkoutSchema = z.object({
   parishId: z.string().min(1, "Seleccioná una parroquia"),
   addressReference: z.string().trim().min(1, "Ingresá una referencia de dirección"),
   paymentMethodId: z.string().min(1, "Seleccioná un método de pago"),
+  fulfillmentMethodId: z.string().optional(),
 });
 
 export type CheckoutFormValues = z.infer<typeof checkoutSchema>;
