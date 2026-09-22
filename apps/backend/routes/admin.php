@@ -5,6 +5,8 @@ use App\Http\Controllers\Api\Admin\CategoryController;
 use App\Http\Controllers\Api\Admin\CurrencyController;
 use App\Http\Controllers\Api\Admin\ExchangeRateController;
 use App\Http\Controllers\Api\Admin\ExchangeRateSettingController;
+use App\Http\Controllers\Api\Admin\FulfillmentMethodController;
+use App\Http\Controllers\Api\Admin\FulfillmentZoneRateController;
 use App\Http\Controllers\Api\Admin\InventoryController;
 use App\Http\Controllers\Api\Admin\OrderController;
 use App\Http\Controllers\Api\Admin\PaymentMethodController;
@@ -179,5 +181,35 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
             ->name('payment-methods.update');
         Route::delete('/payment-methods/{paymentMethod}', [PaymentMethodController::class, 'destroy'])
             ->name('payment-methods.destroy');
+
+        // Same shape as payment methods: declared first so "types" and
+        // "reorder" are never read as an id.
+        Route::get('/fulfillment-method-types', [FulfillmentMethodController::class, 'types'])
+            ->name('fulfillment-method-types.index');
+        Route::post('/fulfillment-methods/reorder', [FulfillmentMethodController::class, 'reorder'])
+            ->name('fulfillment-methods.reorder');
+
+        Route::get('/fulfillment-methods', [FulfillmentMethodController::class, 'index'])
+            ->name('fulfillment-methods.index');
+        Route::post('/fulfillment-methods', [FulfillmentMethodController::class, 'store'])
+            ->name('fulfillment-methods.store');
+        Route::get('/fulfillment-methods/{fulfillmentMethod}', [FulfillmentMethodController::class, 'show'])
+            ->name('fulfillment-methods.show');
+        Route::patch('/fulfillment-methods/{fulfillmentMethod}', [FulfillmentMethodController::class, 'update'])
+            ->name('fulfillment-methods.update');
+        Route::delete('/fulfillment-methods/{fulfillmentMethod}', [FulfillmentMethodController::class, 'destroy'])
+            ->name('fulfillment-methods.destroy');
+
+        // Per-zone overrides (PRD section 6: "tarifa plana por zona"). Not
+        // nested under a resource route because update/destroy address a rate
+        // directly — the method only matters for index/store.
+        Route::get('/fulfillment-methods/{fulfillmentMethod}/zone-rates', [FulfillmentZoneRateController::class, 'index'])
+            ->name('fulfillment-methods.zone-rates.index');
+        Route::post('/fulfillment-methods/{fulfillmentMethod}/zone-rates', [FulfillmentZoneRateController::class, 'store'])
+            ->name('fulfillment-methods.zone-rates.store');
+        Route::patch('/zone-rates/{zoneRate}', [FulfillmentZoneRateController::class, 'update'])
+            ->name('zone-rates.update');
+        Route::delete('/zone-rates/{zoneRate}', [FulfillmentZoneRateController::class, 'destroy'])
+            ->name('zone-rates.destroy');
     });
 });

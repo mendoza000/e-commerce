@@ -4,10 +4,13 @@ namespace App\Services;
 
 use App\Domain\Enums\OrderStatus;
 use App\Models\Customer;
+use App\Models\FulfillmentMethod;
+use App\Models\Municipality;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\PaymentMethod;
 use App\Models\ProductVariant;
+use App\Models\State;
 use App\Models\StoreSetting;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -59,6 +62,13 @@ class OrderService
                 $baseAmount = bcadd($baseAmount, $lineTotal, 6);
             }
 
+            [$fulfillmentMethod, $shippingAmount] = $this->resolveShipping($validated);
+
+            // "A coordinar" (no zone rate configured) freezes as null and adds
+            // nothing to the total the customer is asked to pay now — the PRD
+            // is explicit that this must never block checkout.
+            $orderTotalBase = bcadd($baseAmount, $shippingAmount ?? '0', 6);
+
             if ($paymentCurrency->is($baseCurrency)) {
                 $exchangeRateApplied = '1.000000';
             } else {
@@ -73,7 +83,7 @@ class OrderService
                 $exchangeRateApplied = (string) $rate->rate;
             }
 
-            $paymentAmount = bcmul($baseAmount, $exchangeRateApplied, 6);
+            $paymentAmount = bcmul($orderTotalBase, $exchangeRateApplied, 6);
 
             $order = Order::create([
                 'customer_id' => $customer?->id,
@@ -93,6 +103,8 @@ class OrderService
                 'exchange_rate_applied' => $exchangeRateApplied,
                 'payment_amount' => $paymentAmount,
                 'payment_method_id' => $paymentMethod->id,
+                'fulfillment_method_id' => $fulfillmentMethod?->id,
+                'shipping_amount' => $shippingAmount,
                 'reservation_expires_at' => now()->addMinutes((int) config('commerce.reservation_minutes')),
             ]);
 
@@ -128,9 +140,32 @@ class OrderService
 
             return $order->load([
                 'items', 'baseCurrency', 'paymentCurrency', 'state', 'municipality', 'parish',
-                'paymentMethod.currency',
+                'paymentMethod.currency', 'fulfillmentMethod.currency',
             ]);
         });
+    }
+
+    /**
+     * Resolves the chosen fulfillment method (if any) and prices it for the
+     * order's destination. Returns null cost for "a coordinar" — no zone rate
+     * configured — which is a valid outcome, not an error: PRD section 6 never
+     * blocks checkout on a missing shipping quote.
+     *
+     * @param  array<string, mixed>  $validated
+     * @return array{0: ?FulfillmentMethod, 1: ?string}
+     */
+    private function resolveShipping(array $validated): array
+    {
+        if (empty($validated['fulfillment_method_id'])) {
+            return [null, null];
+        }
+
+        $method = FulfillmentMethod::query()->findOrFail($validated['fulfillment_method_id']);
+
+        $state = State::query()->find($validated['state_id']);
+        $municipality = Municipality::query()->find($validated['municipality_id']);
+
+        return [$method, $method->estimateCostFor($state, $municipality)];
     }
 
     private function describeVariant(ProductVariant $variant): ?string

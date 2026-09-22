@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CurrencyController;
+use App\Http\Controllers\Api\CustomerAuthController;
+use App\Http\Controllers\Api\FulfillmentMethodController;
 use App\Http\Controllers\Api\LocationController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PaymentMethodController;
@@ -31,10 +33,27 @@ Route::get('/orders/{order:order_number}', [OrderController::class, 'show'])->mi
 
 Route::get('/payment-methods', [PaymentMethodController::class, 'index']);
 
+// Priced only when ?state_id= is given — see Api\FulfillmentMethodController.
+Route::get('/fulfillment-methods', [FulfillmentMethodController::class, 'index']);
+
 // Same guest-friendly access rule as GET /orders/{order}: ownership is checked
 // inside the controller. Throttled harder because it accepts file uploads.
 Route::post('/orders/{order:order_number}/payment-proof', [PaymentProofController::class, 'store'])
     ->middleware('throttle:10,1');
+
+// Token-based customer accounts (see CustomerLoginRequest for why this is a
+// token and not the admin panel's session cookie). Registering is opt-in:
+// guest checkout remains the default path (docs/decisions.md).
+Route::post('/customer/register', [CustomerAuthController::class, 'register']);
+Route::post('/customer/login', [CustomerAuthController::class, 'login'])->middleware('throttle:10,1');
+
+Route::middleware('auth:customer')->group(function () {
+    Route::post('/customer/logout', [CustomerAuthController::class, 'logout']);
+    Route::get('/customer/me', [CustomerAuthController::class, 'me']);
+
+    // "Mis pedidos" (PRD section 5).
+    Route::get('/my-orders', [OrderController::class, 'mine']);
+});
 
 Route::get('/health', function () {
     try {

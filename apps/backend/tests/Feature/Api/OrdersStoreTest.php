@@ -5,6 +5,8 @@ namespace Tests\Feature\Api;
 use App\Models\Currency;
 use App\Models\Customer;
 use App\Models\ExchangeRate;
+use App\Models\FulfillmentMethod;
+use App\Models\FulfillmentZoneRate;
 use App\Models\Municipality;
 use App\Models\Parish;
 use App\Models\PaymentMethod;
@@ -286,5 +288,125 @@ class OrdersStoreTest extends TestCase
         $second->assertJsonStructure(['error' => ['fields' => ['items.0.quantity']]]);
 
         $this->assertSame(1, $variant->fresh()->reserved_quantity);
+    }
+
+    // -----------------------------------------------------------------
+    // Fulfillment / shipping cost (Fase 6)
+    // -----------------------------------------------------------------
+
+    public function test_fulfillment_method_id_is_optional(): void
+    {
+        $variant = ProductVariant::factory()->create(['price_override' => 10, 'stock' => 10]);
+
+        $response = $this->postJson('/api/orders', $this->basePayload([
+            'items' => [['product_variant_id' => $variant->id, 'quantity' => 1]],
+        ]));
+
+        $response->assertCreated();
+        $response->assertJsonPath('data.fulfillment_method.id', null);
+        $response->assertJsonPath('data.shipping_amount', null);
+        $response->assertJsonPath('data.payment_amount', '10.000000');
+    }
+
+    public function test_a_flat_base_cost_is_added_to_the_total(): void
+    {
+        $method = FulfillmentMethod::factory()->create(['base_cost' => 3, 'currency_id' => $this->usd->id]);
+        $variant = ProductVariant::factory()->create(['price_override' => 10, 'stock' => 10]);
+
+        $address = $this->makeAddress();
+
+        $response = $this->postJson('/api/orders', $this->basePayload(array_merge($address, [
+            'items' => [['product_variant_id' => $variant->id, 'quantity' => 1]],
+            'fulfillment_method_id' => $method->id,
+        ])));
+
+        $response->assertCreated();
+        $response->assertJsonPath('data.fulfillment_method.id', $method->id);
+        $response->assertJsonPath('data.shipping_amount', '3.000000');
+        $response->assertJsonPath('data.base_amount', '10.000000');
+        $response->assertJsonPath('data.payment_amount', '13.000000');
+    }
+
+    public function test_a_zone_rate_overrides_the_flat_base_cost(): void
+    {
+        $method = FulfillmentMethod::factory()->create(['base_cost' => 3, 'currency_id' => $this->usd->id]);
+        $variant = ProductVariant::factory()->create(['price_override' => 10, 'stock' => 10]);
+
+        $address = $this->makeAddress();
+        FulfillmentZoneRate::factory()->create([
+            'fulfillment_method_id' => $method->id,
+            'state_id' => $address['state_id'],
+            'cost' => 7,
+        ]);
+
+        $response = $this->postJson('/api/orders', $this->basePayload(array_merge($address, [
+            'items' => [['product_variant_id' => $variant->id, 'quantity' => 1]],
+            'fulfillment_method_id' => $method->id,
+        ])));
+
+        $response->assertCreated();
+        $response->assertJsonPath('data.shipping_amount', '7.000000');
+        $response->assertJsonPath('data.payment_amount', '17.000000');
+    }
+
+    /**
+     * "A coordinar" never blocks checkout (PRD section 6): the order is still
+     * created, with a null shipping_amount and no addition to the total.
+     */
+    public function test_no_configured_rate_freezes_as_a_coordinar_without_blocking_checkout(): void
+    {
+        $method = FulfillmentMethod::factory()->create(['base_cost' => null, 'currency_id' => $this->usd->id]);
+        $variant = ProductVariant::factory()->create(['price_override' => 10, 'stock' => 10]);
+
+        $response = $this->postJson('/api/orders', $this->basePayload([
+            'items' => [['product_variant_id' => $variant->id, 'quantity' => 1]],
+            'fulfillment_method_id' => $method->id,
+        ]));
+
+        $response->assertCreated();
+        $response->assertJsonPath('data.shipping_amount', null);
+        $response->assertJsonPath('data.payment_amount', '10.000000');
+    }
+
+    public function test_shipping_cost_is_converted_to_the_payment_currency(): void
+    {
+        ExchangeRate::create([
+            'from_currency_id' => $this->usd->id,
+            'to_currency_id' => $this->ves->id,
+            'rate' => 40,
+            'source' => 'manual',
+            'reference_amount' => null,
+            'effective_at' => now()->subMinute(),
+            'created_by' => null,
+        ]);
+
+        $method = FulfillmentMethod::factory()->create(['base_cost' => 2, 'currency_id' => $this->usd->id]);
+        $variant = ProductVariant::factory()->create(['price_override' => 10, 'stock' => 10]);
+
+        $response = $this->postJson('/api/orders', $this->basePayload([
+            'payment_method_id' => $this->vesMethod->id,
+            'items' => [['product_variant_id' => $variant->id, 'quantity' => 1]],
+            'fulfillment_method_id' => $method->id,
+        ]));
+
+        $response->assertCreated();
+        // (10 items + 2 shipping) * 40 = 480, in the base currency the
+        // shipping amount itself stays unconverted.
+        $response->assertJsonPath('data.shipping_amount', '2.000000');
+        $response->assertJsonPath('data.payment_amount', '480.000000');
+    }
+
+    public function test_an_inactive_fulfillment_method_is_rejected(): void
+    {
+        $method = FulfillmentMethod::factory()->inactive()->create();
+        $variant = ProductVariant::factory()->create(['stock' => 10]);
+
+        $response = $this->postJson('/api/orders', $this->basePayload([
+            'items' => [['product_variant_id' => $variant->id, 'quantity' => 1]],
+            'fulfillment_method_id' => $method->id,
+        ]));
+
+        $response->assertStatus(422);
+        $response->assertJsonStructure(['error' => ['fields' => ['fulfillment_method_id']]]);
     }
 }

@@ -4,13 +4,16 @@ namespace Tests\Feature\Api\Admin;
 
 use App\Domain\Enums\InventoryMovementType;
 use App\Domain\Enums\OrderStatus;
+use App\Models\Customer;
 use App\Models\InventoryMovement;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\PaymentMethod;
 use App\Models\ProductVariant;
 use App\Models\User;
+use App\Notifications\OrderStatusUpdated;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 /**
@@ -320,5 +323,112 @@ class OrderActionsTest extends TestCase
                 'reason' => 'Pedido de prueba.',
             ])
             ->assertOk();
+    }
+
+    // -----------------------------------------------------------------
+    // Shipping details on the shipped transition (Fase 6)
+    // -----------------------------------------------------------------
+
+    public function test_marking_shipped_records_the_courier_tracking_code_and_note(): void
+    {
+        $order = $this->submittedOrder();
+        $order->confirmPayment($this->admin);
+        $order->advanceTo(OrderStatus::Preparing, $this->admin);
+
+        $this->actingAs($this->admin)
+            ->postJson("/api/admin/orders/{$order->order_number}/transition", [
+                'status' => 'shipped',
+                'courier' => 'MRW',
+                'tracking_code' => 'ABC123',
+                'note' => 'Dejar en portería.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'shipped')
+            ->assertJsonPath('data.shipping.courier', 'MRW')
+            ->assertJsonPath('data.shipping.tracking_code', 'ABC123')
+            ->assertJsonPath('data.shipping.note', 'Dejar en portería.');
+    }
+
+    /**
+     * courier/tracking_code/note only make sense next to Shipped: PRD section
+     * 6 ties them to that specific action.
+     */
+    public function test_courier_details_are_rejected_for_any_other_transition(): void
+    {
+        $order = $this->submittedOrder();
+        $order->confirmPayment($this->admin);
+
+        $this->actingAs($this->admin)
+            ->postJson("/api/admin/orders/{$order->order_number}/transition", [
+                'status' => 'preparing',
+                'courier' => 'MRW',
+            ])
+            ->assertStatus(422)
+            ->assertJsonStructure(['error' => ['fields' => ['courier']]]);
+    }
+
+    // -----------------------------------------------------------------
+    // Customer notifications (Fase 6)
+    // -----------------------------------------------------------------
+
+    public function test_confirming_payment_notifies_a_registered_customer(): void
+    {
+        Notification::fake();
+
+        $customer = Customer::factory()->create(['email' => 'juan@example.test']);
+        $order = $this->submittedOrder();
+        $order->update(['customer_id' => $customer->id]);
+
+        $this->actingAs($this->admin)
+            ->postJson("/api/admin/orders/{$order->order_number}/confirm-payment")
+            ->assertOk();
+
+        Notification::assertSentTo($customer, OrderStatusUpdated::class);
+    }
+
+    public function test_marking_shipped_notifies_a_registered_customer(): void
+    {
+        Notification::fake();
+
+        $customer = Customer::factory()->create(['email' => 'juan@example.test']);
+        $order = $this->submittedOrder();
+        $order->confirmPayment($this->admin);
+        $order->advanceTo(OrderStatus::Preparing, $this->admin);
+        $order->update(['customer_id' => $customer->id]);
+
+        $this->actingAs($this->admin)
+            ->postJson("/api/admin/orders/{$order->order_number}/transition", ['status' => 'shipped'])
+            ->assertOk();
+
+        Notification::assertSentTo($customer, OrderStatusUpdated::class);
+    }
+
+    public function test_marking_preparing_does_not_notify(): void
+    {
+        Notification::fake();
+
+        $customer = Customer::factory()->create(['email' => 'juan@example.test']);
+        $order = $this->submittedOrder();
+        $order->confirmPayment($this->admin);
+        $order->update(['customer_id' => $customer->id]);
+
+        $this->actingAs($this->admin)
+            ->postJson("/api/admin/orders/{$order->order_number}/transition", ['status' => 'preparing'])
+            ->assertOk();
+
+        Notification::assertNothingSent();
+    }
+
+    public function test_a_guest_order_is_not_notified(): void
+    {
+        Notification::fake();
+
+        $order = $this->submittedOrder();
+
+        $this->actingAs($this->admin)
+            ->postJson("/api/admin/orders/{$order->order_number}/confirm-payment")
+            ->assertOk();
+
+        Notification::assertNothingSent();
     }
 }

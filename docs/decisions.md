@@ -704,3 +704,124 @@ concreto en `ManualPaymentProvider`.
 - La coherencia entre monedas y métodos se valida por los dos lados: no se
   deshabilita una moneda que cobra un método activo, ni se crea un método que
   cobre en una moneda deshabilitada.
+
+---
+
+### 2026-09-02 — Fulfillment: zonas como tabla propia, tarifa plana como fallback
+
+**Decisión:** `fulfillment_zone_rates` (fulfillment_method_id, state_id,
+municipality_id nullable, cost nullable) vive separada de
+`fulfillment_methods.base_cost`. `FulfillmentMethod::estimateCostFor()`
+resuelve en este orden: fila de municipio → fila de estado (municipality_id
+null) → `base_cost` del método → `null` ("a coordinar"). Una fila explícita
+con `cost = null` es distinta de que no exista fila: es el admin marcando esa
+zona puntual como "a coordinar" aunque el método tenga tarifa plana.
+
+**Alternativas consideradas:** una columna JSON de tarifas por estado en
+`fulfillment_methods`; o exigir que toda zona tenga fila propia (sin
+`base_cost` como fallback).
+
+**Razón:** el PRD (sección 6) pide "tarifa plana por zona, o a coordinar" como
+el caso simple — la mayoría de tiendas van a configurar un `base_cost` y nunca
+tocar `fulfillment_zone_rates`. Una tabla propia solo se vuelve necesaria
+cuando una zona puntual necesita otro precio (o ninguno), y entonces el
+admin agrega esa fila sin tener que enumerar las demás.
+
+**Implicaciones técnicas:**
+- `base_cost` es una tarifa **sin zona**: `estimateCostFor(null, null)` la
+  devuelve igual, porque no depende de destino. La restricción "sin estado no
+  hay precio" vive en `Api\FulfillmentMethodController` (el storefront no
+  muestra un precio antes de tener dirección), no en el provider.
+- Índice único parcial (`WHERE municipality_id IS NULL`) además del unique de
+  tres columnas: Postgres no deduplica NULLs por sí solo, así que sin el
+  índice parcial dos filas "toda la zona de Miranda" podrían coexistir.
+- `RetiroEnTiendaProvider` no extiende `ManualFulfillmentProvider`: retirar en
+  tienda no tiene destino que tarifar, así que siempre cuesta `0`,
+  independientemente de `base_cost` o de cualquier fila de zona configurada.
+
+---
+
+### 2026-09-02 — `fulfillment_method_id` opcional en el checkout, a diferencia de `payment_method_id`
+
+**Decisión:** `OrderStoreRequest` valida `fulfillment_method_id` como
+`nullable`, no `required`. El costo de envío (`orders.shipping_amount`, en
+moneda base) se suma a `base_amount` antes de convertir a `payment_amount`
+solo cuando el método fue elegido y tiene tarifa conocida; si no hay método o
+la zona es "a coordinar", el checkout sigue sin bloquearse y `shipping_amount`
+queda en `null`.
+
+**Alternativas consideradas:** exigirlo siempre, igual que
+`payment_method_id` (Fase 4).
+
+**Razón:** el PRD (sección 6) dice explícitamente "si aplica más de una
+opción" — a diferencia del pago, que siempre necesita un método para saber en
+qué moneda se congela la orden, el envío puede no tener alternativa real
+(una tienda con un solo método, o ninguno configurado todavía) y el checkout
+tiene que seguir funcionando. Mantenerlo opcional también evita romper el
+contrato de checkout que las Fases 3 y 4 ya dejaron probado.
+
+---
+
+### 2026-09-02 — Cuenta de cliente: token Sanctum, no cookie de sesión
+
+**Decisión:** `POST /api/customer/register` y `POST /api/customer/login`
+devuelven un token de acceso personal de Sanctum (`Bearer`), no una cookie de
+sesión. El checkout como invitado sigue siendo el camino por defecto — crear
+cuenta es opcional y solo existe para poder ver "mis pedidos".
+
+**Alternativas consideradas:** sesión SPA por cookie, igual que el panel admin
+(Fase 5a).
+
+**Razón:** el patrón de cookie exige que frontend y backend compartan dominio
+padre, lo cual tiene sentido para el panel (una sola instalación, un solo
+admin a la vez) pero no aporta nada aquí — el storefront público ya resolvía
+clientes autenticados por Bearer token desde la Fase 3
+(`OrderController::store` ya leía `$request->user('customer')`, ver
+`OrdersStoreTest`), así que un login con token es simplemente completar un
+mecanismo que ya existía a medias, no introducir uno nuevo.
+
+**Implicaciones técnicas:**
+- El guard `customer` (`driver: sanctum`) ya estaba declarado desde la Fase 1
+  sin ningún endpoint que lo usara; esta fase agrega el primero.
+- El logout llama a `Auth::forgetGuards()` después de borrar el token, misma
+  razón que `Admin\AuthController::logout()`: el guard de Sanctum cachea el
+  usuario resuelto y, sin eso, un worker de larga vida (o, en tests, una
+  llamada posterior dentro del mismo test) seguiría autenticando un token ya
+  borrado.
+- `customers.email` no tenía índice único — la tabla no se escribía desde
+  ningún controlador hasta esta fase (el checkout de invitado nunca toca
+  `customers`), así que agregarlo retroactivamente no arriesga duplicados
+  existentes.
+
+---
+
+### 2026-09-02 — Notificación al cliente: solo email, y solo con cuenta registrada
+
+**Decisión:** `CustomerNotificationService` envía `OrderStatusUpdated`
+(pagada, enviada, entregada — PRD sección 5) únicamente por email, y
+únicamente cuando la orden tiene un `customer_id` con `email`. El correo
+incluye un link `wa.me` prellenado hacia el **número de la tienda**, no hacia
+el cliente — la contracara del link que `PaymentProofSubmitted` ya le da al
+admin para escribirle al cliente.
+
+**Alternativas consideradas:** intentar "enviar" también por WhatsApp;
+capturar un email opcional en el checkout de invitado para ampliar el
+alcance.
+
+**Razón:** no existe forma de empujar un mensaje de WhatsApp sin la API
+oficial (backlog, PRD sección 8) — un link `wa.me` solo funciona si alguien lo
+hace clic, así que "notificar por WhatsApp" a un cliente no es algo que el
+backend pueda ejecutar solo; el máximo viable es ofrecerle al cliente un
+camino directo para escribir a la tienda. Y el checkout de invitado (Fase 3)
+deliberadamente nunca pide email — pedirlo ahora para habilitar esta
+notificación cambiaría el contrato de checkout para un beneficio que la
+mayoría de compras (invitado) no usaría.
+
+**Implicaciones técnicas:**
+- Hueco conocido, no resuelto: una orden de invitado nunca se notifica por
+  este canal. Es consistente con que "mis pedidos" tampoco existe sin cuenta.
+- La notificación se dispara desde `Admin\OrderController` (confirm-payment y
+  transition a shipped/delivered), no desde el modelo `Order` — mismo patrón
+  que `PaymentProofService` dispara `PaymentProofSubmitted` fuera de la
+  transacción de `Order`, para no encolar un job atado a una transacción que
+  todavía podría revertirse.
