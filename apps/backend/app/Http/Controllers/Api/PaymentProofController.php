@@ -26,8 +26,12 @@ class PaymentProofController extends Controller
 
         $proofs->store($order, $request->file('proof'), $request->input('reference'));
 
+        // Same relation set as OrderController::show() — OrderResource uses
+        // whenLoaded() for these, so leaving one out doesn't serialize it as
+        // null, it drops the key from the response entirely.
         return OrderResource::make($order->fresh()->load([
-            'items', 'baseCurrency', 'paymentCurrency', 'paymentMethod.currency', 'latestPaymentProof',
+            'items', 'baseCurrency', 'paymentCurrency', 'state', 'municipality', 'parish',
+            'paymentMethod.currency', 'fulfillmentMethod.currency', 'latestPaymentProof',
         ]))->response()->setStatusCode(201);
     }
 }
