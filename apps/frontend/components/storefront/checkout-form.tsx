@@ -14,9 +14,12 @@ import { checkoutSchema, type CheckoutFormValues } from "@/lib/schemas/checkout"
 import { createOrder, type CreateOrderPayload } from "@/lib/api/orders";
 import { ApiError, type ApiErrorBody } from "@/lib/api/client";
 import type { State } from "@/lib/api/locations";
+import type { Currency } from "@/lib/api/currencies";
 import type { PaymentMethod } from "@/lib/api/payment-methods";
+import type { FulfillmentMethod } from "@/lib/api/fulfillment-methods";
 import { AddressSelects } from "@/components/storefront/address-selects";
 import { PaymentMethodPicker } from "@/components/storefront/payment-method-picker";
+import { FulfillmentMethodPicker } from "@/components/storefront/fulfillment-method-picker";
 import {
   Form,
   FormControl,
@@ -41,7 +44,46 @@ const BACKEND_TO_FORM_FIELD: Record<string, keyof CheckoutFormValues> = {
   parish_id: "parishId",
   address_reference: "addressReference",
   payment_method_id: "paymentMethodId",
+  fulfillment_method_id: "fulfillmentMethodId",
 };
+
+/**
+ * Converts a fulfillment method's `estimated_cost` (denominated in the
+ * method's own currency, e.g. always VES for a courier) into the storefront's
+ * currently selected display currency, using the base-currency rates already
+ * loaded by CurrencyProvider. Returns null when there's nothing to convert or
+ * a rate is missing — callers fall back to showing the cost in its own
+ * currency instead of guessing.
+ */
+function convertFulfillmentCost(
+  method: FulfillmentMethod,
+  displayCurrency: Currency | null,
+  currencies: Currency[],
+): number | null {
+  if (!displayCurrency || method.estimated_cost === null || !method.currency) {
+    return null;
+  }
+
+  const methodCurrency = currencies.find((c) => c.code === method.currency!.code);
+  if (!methodCurrency?.rate) {
+    return null;
+  }
+
+  const baseAmount = parseFloat(method.estimated_cost) / parseFloat(methodCurrency.rate);
+  return convertPrice(baseAmount, displayCurrency);
+}
+
+/** Formats the shipping estimate line: converted to the display currency when possible, else in the method's own currency. */
+function formatShippingEstimate(
+  method: FulfillmentMethod,
+  convertedAmount: number | null,
+  displayCurrency: Currency | null,
+): string {
+  if (method.estimated_cost === null) return "A coordinar";
+  if (convertedAmount !== null && displayCurrency) return formatCurrency(convertedAmount, displayCurrency);
+  if (method.currency) return formatCurrency(parseFloat(method.estimated_cost), { ...method.currency, rate: null });
+  return method.estimated_cost;
+}
 
 export function CheckoutForm({
   initialStates,
@@ -54,11 +96,14 @@ export function CheckoutForm({
   const hydrated = useCartHydrated();
   const items = useCartStore((state) => state.items);
   const clear = useCartStore((state) => state.clear);
-  const { selected: currency } = useCurrency();
+  const { selected: currency, currencies } = useCurrency();
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [itemErrors, setItemErrors] = useState<Record<number, string>>({});
+  const [selectedFulfillmentMethod, setSelectedFulfillmentMethod] = useState<FulfillmentMethod | null>(
+    null,
+  );
 
   const form = useForm<CheckoutFormValues>({
     resolver: zodResolver(checkoutSchema),
@@ -72,6 +117,7 @@ export function CheckoutForm({
       parishId: "",
       addressReference: "",
       paymentMethodId: "",
+      fulfillmentMethodId: "",
     },
   });
 
@@ -92,6 +138,11 @@ export function CheckoutForm({
 
   const baseTotal = items.reduce((sum, item) => sum + parseFloat(item.unitPrice) * item.quantity, 0);
   const total = currency ? convertPrice(baseTotal, currency) : null;
+
+  const shippingEstimateAmount = selectedFulfillmentMethod
+    ? convertFulfillmentCost(selectedFulfillmentMethod, currency, currencies)
+    : null;
+  const totalWithShipping = total !== null ? total + (shippingEstimateAmount ?? 0) : null;
 
   async function onSubmit(values: CheckoutFormValues) {
     if (!currency) {
@@ -118,6 +169,7 @@ export function CheckoutForm({
         parish_id: Number(values.parishId),
         address_reference: values.addressReference,
         payment_method_id: Number(values.paymentMethodId),
+        fulfillment_method_id: values.fulfillmentMethodId ? Number(values.fulfillmentMethodId) : undefined,
       };
 
       const order = await createOrder(payload);
@@ -264,6 +316,8 @@ export function CheckoutForm({
 
           <PaymentMethodPicker form={form} paymentMethods={paymentMethods} />
 
+          <FulfillmentMethodPicker form={form} onSelectedMethodChange={setSelectedFulfillmentMethod} />
+
           {submitError ? (
             <p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
               {submitError}
@@ -311,10 +365,26 @@ export function CheckoutForm({
           })}
         </ul>
 
+        {selectedFulfillmentMethod ? (
+          <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <span>Envío (estimado)</span>
+            <span>
+              {formatShippingEstimate(selectedFulfillmentMethod, shippingEstimateAmount, currency)}
+            </span>
+          </div>
+        ) : null}
+
         <div className="flex items-center justify-between border-t pt-3 font-semibold">
-          <span>Total</span>
-          {total !== null && currency ? <span>{formatCurrency(total, currency)}</span> : null}
+          <span>Total{shippingEstimateAmount !== null ? " (incl. envío estimado)" : ""}</span>
+          {totalWithShipping !== null && currency ? (
+            <span>{formatCurrency(totalWithShipping, currency)}</span>
+          ) : null}
         </div>
+        {selectedFulfillmentMethod ? (
+          <p className="text-xs text-muted-foreground">
+            El costo de envío final lo confirma la tienda; este es un estimado.
+          </p>
+        ) : null}
       </aside>
     </div>
   );
