@@ -105,6 +105,15 @@ Entidad base del catálogo. El precio y stock reales viven en `product_variants`
 - El precio de una variante puede sobrescribir `base_price` vía
   `price_override`; si es nulo, se usa el precio base del producto
   (`ProductVariant::effectivePrice()`).
+- El `slug` lo deriva el backend del nombre (`Product::uniqueSlug()`), y
+  renombrar un producto **no** lo cambia: es la URL pública que un cliente pudo
+  guardar. Cambiarlo es un acto aparte y explícito.
+- "Eliminar" desde el panel es baja lógica (`Product::archive()`) y arrastra a
+  las variantes vivas; restaurar devuelve el producto con todas sus variantes.
+  El borrado real está descartado porque `order_items` apunta a esas variantes.
+  Ver `docs/decisions.md`.
+- `is_active` (despublicar) y `deleted_at` (archivar) son cosas distintas: la
+  primera esconde el producto del storefront, la segunda lo saca del catálogo.
 
 ### product_options
 
@@ -159,13 +168,22 @@ stock y precio propios.
   ciclo `pending_payment → paid` (PRD sección 5quater): al crear la orden se
   reserva stock (no se descuenta todavía); al confirmarse el pago la reserva
   se convierte en descuento definitivo; si la orden se cancela/rechaza o la
-  reserva expira, el stock se libera. Esta reserva NO genera fila propia en
-  `inventory_movements` — es estado transitorio, no un movimiento auditable.
+  reserva expira, el stock se libera. La reserva **sí** deja fila en
+  `inventory_movements` (corrección del 2026-07-02, ver `docs/decisions.md`);
+  lo que no se audita ahí es el saldo vivo, que vive en `reserved_quantity`.
 - Por defecto no se permite backorder/preventa: si el stock disponible de una
   variante es 0, no puede completarse una orden con ella.
-- Operación de reservar stock debe ser atómica (lectura + reserva en la misma
-  transacción con `lockForUpdate()` o equivalente) para evitar sobreventa por
-  concurrencia — pendiente de implementar como servicio en Fase 3.
+- La operación de reservar stock es atómica (lectura + reserva en la misma
+  transacción con `lockForUpdate()`), para evitar sobreventa por concurrencia
+  — implementada en `InventoryReservationService` (Fase 3).
+- `stock` nunca se escribe como un campo de formulario: cambiarlo exige motivo
+  y pasa por `InventoryReservationService::adjust()`, que deja la fila
+  `adjustment` en el kardex. La edición de variante desde el panel rechaza
+  `stock` y `reserved_quantity`. Ver `docs/decisions.md`.
+- Un ajuste manual nunca puede dejar `stock` por debajo de
+  `reserved_quantity`: esas unidades ya están prometidas a órdenes abiertas.
+- Todo producto tiene al menos una variante viva: la última no se puede
+  archivar (para retirar el producto entero se archiva el producto).
 
 ### variant_option_values
 
@@ -203,6 +221,15 @@ hereden las mismas fotos sin duplicación.
 **Reglas de negocio:**
 - Si el producto no tiene una opción visual, las imágenes quedan asociadas
   directamente al producto (`product_option_value_id` nulo).
+- Un producto tiene exactamente una imagen principal: la primera que se sube lo
+  es, marcar otra se la quita a la anterior, y borrar la principal se la pasa a
+  la siguiente. El storefront ordena por `is_primary` y luego por `position`.
+- `path` es relativo al disco de `commerce.product_image.disk` (por defecto
+  `public`, servido por el servidor web vía `storage:link` — no por la API,
+  a diferencia de los comprobantes de pago). El nombre guardado es siempre un
+  UUID: el original lo elige quien sube el archivo.
+- `position` es contiguo y por producto: el reordenamiento reescribe la lista
+  entera, nunca un subconjunto.
 
 ## 3. Multimoneda
 
@@ -244,6 +271,15 @@ Historial de tasas de cambio aplicadas.
 - Tabla append-only: nunca se actualiza una fila existente, siempre se
   inserta una nueva tasa con su propio `effective_at`. El historial completo
   queda disponible para auditoría.
+- El panel lo respeta a nivel de API: sobre `exchange_rates` solo existen `GET`
+  y `POST`. Corregir una tasa equivocada es registrar la buena ahora, porque
+  `orders.exchange_rate_applied` se justifica contra este historial y reescribir
+  una fila haría que una orden correcta pareciera equivocada. Ver
+  `docs/decisions.md`.
+- `created_by` distingue quién produjo el número: con valor para la tasa que un
+  admin escribió a mano (`ExchangeRateService::storeManual()`, `source` =
+  `manual`), y en `null` para la que reportó una fuente automática
+  (`ExchangeRateService::refresh()`), donde no lo decidió nadie.
 
 ### exchange_rate_settings
 
@@ -260,9 +296,26 @@ automática, proveedor, frecuencia de actualización).
 | frequency_minutes | unsignedInteger | sí | null | — |
 | reference_amount | decimal(18,6) | sí | null | — |
 | is_active | boolean | no | true | — |
+| last_run_at | timestamp | sí | null | — |
+| last_error_at | timestamp | sí | null | — |
+| last_error | text | sí | null | — |
 | created_at / updated_at | timestamp | sí | — | — |
 
 **Índices/constraints:** único compuesto `(from_currency_id, to_currency_id)` — una única configuración activa por par de monedas.
+
+**Reglas de negocio:**
+- Las tres columnas de seguimiento existen porque un refresco fallido no
+  escribe nada en `exchange_rates`: sin ellas, una fuente rota es invisible
+  hasta que la tasa está muy vieja (PRD 8bis). `last_run_at` avanza en los dos
+  desenlaces, para que una fuente que falla no se reintente en cada tick.
+- El par (`from_currency_id`, `to_currency_id`) no se edita: el historial de
+  refresco describe el par para el que corrió. Se elimina la configuración y se
+  crea la otra.
+- Un par en modo `automatic` exige un `provider` automático. Apuntarlo a
+  `manual` sería un horario sin nada que llamar: `refresh()` lo saltaría en
+  silencio y el par se vería configurado sin actualizarse nunca.
+- Eliminar una configuración detiene la automatización pero no toca las tasas
+  ya registradas para ese par.
 
 ## 4. Ubicación geográfica
 
@@ -397,7 +450,7 @@ motivo.
 | id | bigint | no | — | — |
 | product_variant_id | bigint | sí | null | product_variants.id (nullOnDelete) |
 | sku | string | no | — | — |
-| type | string | no | — | — (enum `InventoryMovementType`: `sale`, `release`, `adjustment`) |
+| type | string | no | — | — (enum `InventoryMovementType`: `reservation`, `sale`, `release`, `restock`, `adjustment`) |
 | quantity_change | integer | no | — | — |
 | reason | text | sí | null | — |
 | order_id | bigint | sí | null | orders.id (nullOnDelete) |
@@ -407,14 +460,23 @@ motivo.
 **Índices/constraints:** índice compuesto `(product_variant_id, created_at)`. Sin `updated_at`.
 
 **Reglas de negocio:**
-- Ledger append-only e inmutable de los 3 movimientos definitivos: venta
-  confirmada (`sale`), liberación por cancelación/expiración (`release`) y
-  ajuste manual del admin (`adjustment`, ej. reposición, corrección de
-  conteo físico, baja por daño/pérdida).
-- La reserva transitoria (`pending_payment`) vive únicamente en
-  `product_variants.reserved_quantity`/`reserved_until` y no genera fila
-  propia en este kardex — solo se audita el movimiento definitivo, no el
-  estado intermedio de reserva.
+- Ledger append-only e inmutable de los movimientos de inventario: reserva al
+  crearse la orden (`reservation`), venta confirmada (`sale`), liberación de la
+  reserva por cancelación o expiración (`release`), reingreso a stock al
+  cancelar una orden que ya estaba pagada (`restock`) y ajuste manual del admin
+  (`adjustment`, ej. reposición, corrección de conteo físico, baja por
+  daño/pérdida).
+- `adjustment` es el único tipo que no produce ningún camino automático: lo
+  emite `InventoryReservationService::adjust()` desde
+  `POST /api/admin/variants/{variant}/adjust-stock`, con motivo obligatorio y
+  el `created_by` del admin. Por eso `reason` es opcional en la columna pero
+  obligatorio ahí.
+- Es un ledger de solo escritura: nada en el panel edita ni borra una fila. El
+  historial por variante se lee paginado desde
+  `GET /api/admin/variants/{variant}/movements`.
+- La reserva deja su propia fila, pero el saldo vivo de unidades reservadas no
+  se lee del kardex: vive en `product_variants.reserved_quantity`. La columna
+  `reserved_until` es estado transitorio y no se audita aquí.
 - `sku` se duplica en la fila (además de la FK `product_variant_id`, que es
   nullable) para preservar el dato aunque la variante se elimine.
 
@@ -435,6 +497,22 @@ instalación del backend).
 | base_currency_id | bigint | no | — | currencies.id |
 | whatsapp_number | string(20) | sí | null | — |
 | created_at / updated_at | timestamp | sí | — | — |
+
+**Reglas de negocio:**
+- Fila única: los endpoints de configuración (`GET`/`PUT /api/admin/settings`)
+  no llevan id en la ruta, la resuelven con `StoreSetting::current()`.
+- `base_currency_id` tiene que estar siempre entre las monedas habilitadas:
+  todos los precios se expresan en ella, así que una base que la tienda no
+  acepta dejaría al storefront cotizando en algo que se niega a cobrar.
+- No se puede deshabilitar una moneda que cobra un método de pago activo, ni
+  crear un método que cobre en una moneda deshabilitada — la misma regla,
+  validada por los dos lados.
+- `logo_path` es relativo al disco de `commerce.store_logo.disk` (por defecto
+  `public`, servido por el servidor web vía `storage:link`). Reemplazar el logo
+  borra el archivo anterior.
+- Los campos públicos de esta fila (nombre, logo, colores, WhatsApp, moneda
+  base) se exponen sin sesión en `GET /api/store`, para que el storefront no
+  lleve la identidad de la tienda compilada dentro. Ver `docs/decisions.md`.
 
 ### store_enabled_currencies
 
@@ -469,6 +547,18 @@ uno atado a una única moneda.
 - El método de pago define la moneda de la orden (ej. Pago Móvil → Bs,
   Zelle → USD, Binance Pay → USDT); no se le pide al cliente elegir moneda y
   método por separado.
+- `type` no es editable: decide el provider, qué campos de cuenta tiene el
+  método y si pide comprobante. Cambiarlo reinterpretaría el `instructions`
+  guardado como los campos de otro método. Se crea el otro y se desactiva este.
+- Las claves válidas de `instructions` son las de
+  `PaymentMethodType::instructionFields()` más `notes`, y el alta/edición las
+  valida: una clave que el tipo no lee se guardaría y no se le mostraría nunca
+  a nadie. Editar reemplaza el blob entero, no lo mezcla.
+- Un método con órdenes no se elimina, se desactiva:
+  `orders.payment_method_id` es `nullOnDelete`, así que el borrado pasaría y
+  borraría en silencio cómo se pagaron esas órdenes.
+- `position` decide el orden en el checkout; el panel lo reescribe entero, como
+  el reordenamiento de imágenes de producto.
 
 ### fulfillment_methods
 

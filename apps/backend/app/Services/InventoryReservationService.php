@@ -157,7 +157,7 @@ class InventoryReservationService
      * reservation expired) and records one Release movement per line.
      * Follows the same ascending-lock discipline as lockVariantsForOrder.
      */
-    public function release(Order $order, string $reason): void
+    public function release(Order $order, string $reason, ?User $admin = null): void
     {
         $items = $order->items()->orderBy('product_variant_id')->get();
 
@@ -189,9 +189,125 @@ class InventoryReservationService
                 'quantity_change' => $item->quantity,
                 'reason' => $reason,
                 'order_id' => $order->id,
-                'created_by' => null,
+                // Null when the expiry sweeper is the one releasing: nobody
+                // decided it, the deadline did.
+                'created_by' => $admin?->id,
             ]);
         }
+    }
+
+    /**
+     * Puts back on the shelf the units an order had already taken out of
+     * `stock`, because a sale that was committed is being cancelled. The
+     * mirror image of commit(): `stock` goes back up and no reservation is
+     * involved, since confirmPayment cleared it when it committed.
+     *
+     * Must be called inside an already-open transaction, from Order::cancel,
+     * which holds the order's row lock. Follows the same ascending-lock
+     * discipline as lockVariantsForOrder.
+     */
+    public function restock(Order $order, string $reason, ?User $admin = null): void
+    {
+        $items = $order->items()->orderBy('product_variant_id')->get();
+
+        $variants = $this->lockVariantsOf($items);
+
+        if ($variants === null) {
+            return;
+        }
+
+        foreach ($items as $item) {
+            $variant = $variants->get($item->product_variant_id);
+
+            if ($variant === null) {
+                continue;
+            }
+
+            $variant->increment('stock', (int) $item->quantity);
+
+            InventoryMovement::create([
+                'product_variant_id' => $variant->id,
+                'sku' => $item->sku,
+                'type' => InventoryMovementType::Restock,
+                'quantity_change' => $item->quantity,
+                'reason' => $reason,
+                'order_id' => $order->id,
+                'created_by' => $admin?->id,
+            ]);
+        }
+    }
+
+    /**
+     * Manual stock correction by an admin: a restock, a fix after a physical
+     * count, a write-off for damage or loss. Adjustment is the one movement
+     * type no automatic path emits — everything else in this service is driven
+     * by an order — which is why the reason is mandatory rather than optional:
+     * an unexplained change in stock is exactly what the kardex exists to
+     * prevent.
+     *
+     * `$quantityChange` is signed and relative, never an absolute target:
+     * "+12 arrived" and "-3 broken" are what the admin actually knows, and a
+     * delta cannot silently overwrite a concurrent sale the way a target can.
+     *
+     * The row is re-read under `lockForUpdate` instead of trusting the instance
+     * handed in, so the ceiling below is checked against the stock as it is
+     * now. Stock may never end up under `reserved_quantity`: those units are
+     * already promised to open orders, and pushing stock beneath them is how a
+     * store oversells against live reservations.
+     *
+     * @throws ValidationException
+     */
+    public function adjust(
+        ProductVariant $variant,
+        int $quantityChange,
+        string $reason,
+        ?User $admin = null,
+    ): ProductVariant {
+        return DB::transaction(function () use ($variant, $quantityChange, $reason, $admin) {
+            $locked = ProductVariant::query()
+                ->whereKey($variant->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $resulting = $locked->stock + $quantityChange;
+
+            if ($resulting < 0) {
+                throw ValidationException::withMessages([
+                    'quantity_change' => [
+                        "No puedes descontar {$this->units(-$quantityChange)}: solo hay {$this->units($locked->stock)} en stock.",
+                    ],
+                ]);
+            }
+
+            if ($resulting < $locked->reserved_quantity) {
+                throw ValidationException::withMessages([
+                    'quantity_change' => [
+                        "No puedes dejar el stock por debajo de {$this->units($locked->reserved_quantity)}: ".
+                        'hay órdenes abiertas que ya las tienen reservadas.',
+                    ],
+                ]);
+            }
+
+            $locked->update(['stock' => $resulting]);
+
+            InventoryMovement::create([
+                'product_variant_id' => $locked->id,
+                'sku' => $locked->sku,
+                'type' => InventoryMovementType::Adjustment,
+                'quantity_change' => $quantityChange,
+                'reason' => $reason,
+                // No order caused this: it is a human correcting the shelf.
+                'order_id' => null,
+                'created_by' => $admin?->id,
+            ]);
+
+            return $locked;
+        });
+    }
+
+    private function units(int $quantity): string
+    {
+        return $quantity === 1 ? '1 unidad' : "{$quantity} unidades";
     }
 
     /**

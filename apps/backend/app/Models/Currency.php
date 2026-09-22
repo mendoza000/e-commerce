@@ -41,4 +41,16 @@ class Currency extends Model
     {
         return $this->hasMany(FulfillmentMethod::class);
     }
+
+    /**
+     * Whether the store is currently offering to be paid in this currency.
+     *
+     * Disabling such a currency would leave a payment method the storefront
+     * still shows, charging in something the store says it does not accept —
+     * so the settings endpoint refuses it.
+     */
+    public function isUsedByActivePaymentMethod(): bool
+    {
+        return $this->paymentMethods()->where('is_active', true)->exists();
+    }
 }

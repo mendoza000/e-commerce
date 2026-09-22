@@ -74,4 +74,17 @@ class PaymentMethod extends Model
 
         return $value === null ? null : (string) $value;
     }
+
+    /**
+     * Whether any order was ever placed with this method.
+     *
+     * `orders.payment_method_id` is `nullOnDelete`, so deleting one would not
+     * fail — it would quietly erase how those orders were paid. The panel
+     * refuses and offers deactivation instead, which is what "we stopped
+     * accepting Zelle" actually means.
+     */
+    public function hasOrders(): bool
+    {
+        return $this->orders()->exists();
+    }
 }

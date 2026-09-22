@@ -7,6 +7,7 @@ use App\Models\Order;
 use App\Models\PaymentMethod;
 use App\Models\User;
 use App\Notifications\PaymentProofSubmitted;
+use App\Services\ImageStorageService;
 use App\Services\PaymentProofService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -27,7 +28,7 @@ class PaymentProofServiceTest extends TestCase
         Storage::fake('local');
         Notification::fake();
 
-        $this->service = new PaymentProofService;
+        $this->service = new PaymentProofService(new ImageStorageService);
     }
 
     private function order(): Order

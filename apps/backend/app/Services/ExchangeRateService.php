@@ -2,12 +2,15 @@
 
 namespace App\Services;
 
+use App\Domain\Enums\ExchangeRateProviderType;
 use App\Domain\ExchangeRates\Exceptions\ExchangeRateUnavailable;
 use App\Models\Currency;
 use App\Models\ExchangeRate;
 use App\Models\ExchangeRateSetting;
 use App\Models\StoreSetting;
+use App\Models\User;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 
 class ExchangeRateService
 {
@@ -36,6 +39,47 @@ class ExchangeRateService
             'is_base' => $currency->is($base),
             'rate' => $currency->is($base) ? null : $this->latestRate($base, $currency),
         ])->all();
+    }
+
+    /**
+     * The admin types a rate in by hand.
+     *
+     * Always a new row, never an update of the last one: `exchange_rates` is
+     * the history an order's frozen rate is justified against, and rewriting a
+     * past row would make an order that was correct at the time look wrong.
+     * "Correcting" a rate means entering the right one now, and the newest
+     * `effective_at` is what latestRate() picks up.
+     *
+     * @param  string  $rate  Decimal string, never a float — money precision.
+     *
+     * @throws ValidationException
+     */
+    public function storeManual(
+        Currency $from,
+        Currency $to,
+        string $rate,
+        ?string $referenceAmount = null,
+        ?User $admin = null,
+    ): ExchangeRate {
+        if ($from->is($to)) {
+            throw ValidationException::withMessages([
+                'to_currency_id' => ['Una moneda no se cambia por sí misma.'],
+            ]);
+        }
+
+        return ExchangeRate::create([
+            'from_currency_id' => $from->id,
+            'to_currency_id' => $to->id,
+            'rate' => $rate,
+            // Verbatim in the column, so a historical rate can always be traced
+            // back to whether a person or a source produced it.
+            'source' => ExchangeRateProviderType::Manual->value,
+            'reference_amount' => $referenceAmount,
+            'effective_at' => now(),
+            // The mirror image of refresh(), which leaves this null on purpose:
+            // there, nobody decided the number, a provider reported it.
+            'created_by' => $admin?->id,
+        ]);
     }
 
     /**

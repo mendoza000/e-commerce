@@ -54,6 +54,45 @@ enum OrderStatus: string
         return in_array($this, [self::PendingPayment, self::PaymentSubmitted], true);
     }
 
+    /**
+     * True once confirmPayment turned the reservation into a definitive
+     * deduction from `stock`. Cancelling from here has to put the units back,
+     * not release a reservation that no longer exists — see Order::cancel.
+     */
+    public function hasCommittedStock(): bool
+    {
+        return in_array($this, [self::Paid, self::Preparing, self::Shipped, self::Delivered], true);
+    }
+
+    /**
+     * The statuses that only move an already-paid order along its way to the
+     * customer. They are the only targets the generic admin transition
+     * endpoint accepts: every other move carries a money or inventory side
+     * effect and therefore has its own endpoint (see Order::confirmPayment,
+     * Order::rejectPayment and Order::cancel).
+     *
+     * @return array<int, self>
+     */
+    public static function fulfillmentStatuses(): array
+    {
+        return [self::Preparing, self::Shipped, self::Delivered];
+    }
+
+    /**
+     * The subset of allowedTransitions() the admin panel may perform through
+     * the generic transition endpoint, so the UI can offer exactly the buttons
+     * that will work.
+     *
+     * @return array<int, self>
+     */
+    public function fulfillmentTransitions(): array
+    {
+        return array_values(array_filter(
+            $this->allowedTransitions(),
+            fn (self $target) => in_array($target, self::fulfillmentStatuses(), true),
+        ));
+    }
+
     public function label(): string
     {
         return match ($this) {

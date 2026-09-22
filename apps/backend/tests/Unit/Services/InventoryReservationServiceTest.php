@@ -225,4 +225,73 @@ class InventoryReservationServiceTest extends TestCase
         $this->assertSame(0, $variant->stock);
         $this->assertSame(0, $variant->reserved_quantity);
     }
+
+    public function test_restock_puts_the_units_back_and_leaves_reservations_alone(): void
+    {
+        // What a paid order looks like: committed, so nothing is reserved.
+        $variant = ProductVariant::factory()->create(['stock' => 6, 'reserved_quantity' => 2]);
+
+        $order = Order::factory()->create();
+        OrderItem::factory()->create([
+            'order_id' => $order->id,
+            'product_variant_id' => $variant->id,
+            'sku' => $variant->sku,
+            'quantity' => 4,
+        ]);
+
+        $this->service->restock($order, 'Orden cancelada.');
+
+        $variant->refresh();
+
+        $this->assertSame(10, $variant->stock);
+        // The 2 reserved units belong to somebody else's order.
+        $this->assertSame(2, $variant->reserved_quantity);
+    }
+
+    public function test_restock_records_the_movement_attributed_to_the_admin(): void
+    {
+        $admin = User::factory()->create();
+        $variant = ProductVariant::factory()->create(['stock' => 6, 'reserved_quantity' => 0]);
+
+        $order = Order::factory()->create();
+        OrderItem::factory()->create([
+            'order_id' => $order->id,
+            'product_variant_id' => $variant->id,
+            'sku' => $variant->sku,
+            'quantity' => 4,
+        ]);
+
+        $this->service->restock($order, 'Orden cancelada.', $admin);
+
+        $movement = InventoryMovement::query()
+            ->where('type', InventoryMovementType::Restock)
+            ->firstOrFail();
+
+        $this->assertSame(4, $movement->quantity_change);
+        $this->assertSame('Orden cancelada.', $movement->reason);
+        $this->assertSame($order->id, $movement->order_id);
+        $this->assertSame($admin->id, $movement->created_by);
+    }
+
+    public function test_release_can_be_attributed_to_the_admin_who_cancelled(): void
+    {
+        $admin = User::factory()->create();
+        $variant = ProductVariant::factory()->create(['stock' => 10, 'reserved_quantity' => 5]);
+
+        $order = Order::factory()->create();
+        OrderItem::factory()->create([
+            'order_id' => $order->id,
+            'product_variant_id' => $variant->id,
+            'sku' => $variant->sku,
+            'quantity' => 5,
+        ]);
+
+        $this->service->release($order, 'Cancelada por el administrador.', $admin);
+
+        $movement = InventoryMovement::query()
+            ->where('type', InventoryMovementType::Release)
+            ->firstOrFail();
+
+        $this->assertSame($admin->id, $movement->created_by);
+    }
 }
