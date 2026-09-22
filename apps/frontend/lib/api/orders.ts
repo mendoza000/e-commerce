@@ -53,6 +53,26 @@ export interface OrderPaymentMethod {
   currency: OrderPaymentMethodCurrencyRef;
 }
 
+/**
+ * `Order::paymentInstructions()` delegates to the payment method's provider
+ * (`ManualPaymentProvider::getInstructions()`), which returns this exact
+ * shape — NOT a flat `Record<string, string>`. `account` is the part that
+ * varies per method type (e.g. Pago Móvil: bank/bank_code/phone/document_number;
+ * Zelle: email/holder_name — see `PaymentMethodType::instructionFields()`),
+ * and is what callers should render generically via `Object.entries()`.
+ * `type`/`label`/`currency`/`amount`/`requires_proof` duplicate data already
+ * available elsewhere on `Order` (payment_method, payment_amount, payment_currency).
+ */
+export interface OrderPaymentInstructions {
+  type: string;
+  label: string;
+  currency: string;
+  amount: string;
+  requires_proof: boolean;
+  account: Record<string, string | null>;
+  notes: string | null;
+}
+
 export interface OrderPaymentProof {
   original_name: string;
   mime_type: string;
@@ -87,7 +107,7 @@ export interface Order {
   exchange_rate_applied: string;
   payment_amount: string;
   payment_method: OrderPaymentMethod;
-  payment_instructions: Record<string, string>;
+  payment_instructions: OrderPaymentInstructions;
   payment_proof: OrderPaymentProof | null;
   fulfillment_method: OrderFulfillmentMethod | null;
   shipping_amount: string | null;
@@ -150,4 +170,33 @@ export async function getOrderByNumber(
     }
     throw error;
   }
+}
+
+/**
+ * Multipart upload — `apiFetch` never sets a default Content-Type, so a
+ * `FormData` body here is sent with the boundary the browser generates,
+ * without any change to `apiFetch` itself or its other (JSON) callers.
+ *
+ * `documentNumber` mirrors the same guest-ownership check used by
+ * `getOrderByNumber`; the backend reads it from `document_number` via
+ * `$request->input()`, not from validation rules, so it's sent whenever known.
+ */
+export async function submitPaymentProof(
+  orderNumber: string,
+  params: { proof: File; reference?: string; documentNumber?: string },
+): Promise<Order> {
+  const formData = new FormData();
+  formData.append("proof", params.proof);
+  if (params.reference) {
+    formData.append("reference", params.reference);
+  }
+  if (params.documentNumber) {
+    formData.append("document_number", params.documentNumber);
+  }
+
+  const res = await apiFetch<{ data: Order }>(`/api/orders/${orderNumber}/payment-proof`, {
+    method: "POST",
+    body: formData,
+  });
+  return res.data;
 }
