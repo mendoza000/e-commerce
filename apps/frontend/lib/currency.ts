@@ -13,6 +13,16 @@ export function convertPrice(basePrice: string | number, currency: ConvertibleCu
   return Math.round(price * rate * factor) / factor;
 }
 
+/**
+ * Some resources (storefront and admin order refs) only carry {code, symbol}
+ * — no decimal_places, since amounts there are already frozen server-side,
+ * never reconverted. 2 is a reasonable display default across the currencies
+ * this store actually uses (USD, VES, USDT, COP).
+ */
+export function toDisplayCurrency(ref: { code: string; symbol?: string }): ConvertibleCurrency {
+  return { code: ref.code, symbol: ref.symbol, decimal_places: 2, rate: null };
+}
+
 export function formatCurrency(amount: number, currency: ConvertibleCurrency): string {
   const formatted = new Intl.NumberFormat("es-VE", {
     minimumFractionDigits: currency.decimal_places,
