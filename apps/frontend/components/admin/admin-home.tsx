@@ -14,7 +14,6 @@ export function AdminHome() {
   }
 
   const pending = [
-    { label: "Pedidos", phase: "5b", available: user.permissions.manage_orders },
     { label: "Catálogo e inventario", phase: "5c", available: user.permissions.manage_catalog },
     { label: "Configuración de la tienda", phase: "5d", available: user.permissions.manage_settings },
   ].filter((section) => section.available);
@@ -30,16 +29,18 @@ export function AdminHome() {
         </p>
       </div>
 
-      <div className="rounded-lg border p-4">
-        <h2 className="font-medium">Secciones en construcción</h2>
-        <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-          {pending.map((section) => (
-            <li key={section.label}>
-              {section.label} — fase {section.phase}
-            </li>
-          ))}
-        </ul>
-      </div>
+      {pending.length > 0 ? (
+        <div className="rounded-lg border p-4">
+          <h2 className="font-medium">Secciones en construcción</h2>
+          <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+            {pending.map((section) => (
+              <li key={section.label}>
+                {section.label} — fase {section.phase}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </div>
   );
 }
