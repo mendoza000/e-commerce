@@ -250,7 +250,12 @@ export function CategoriesManager() {
                     >
                       <FormControl>
                         <SelectTrigger className="w-full">
-                          <SelectValue />
+                          <SelectValue>
+                            {(value: string | null) =>
+                              parentOptions.find((option) => String(option.id) === value)?.name ??
+                              "Sin categoría padre (raíz)"
+                            }
+                          </SelectValue>
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
