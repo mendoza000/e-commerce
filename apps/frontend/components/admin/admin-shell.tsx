@@ -27,7 +27,7 @@ interface NavItem {
  */
 const NAV: NavItem[] = [
   { href: "/admin/pedidos", label: "Pedidos", permission: "manage_orders", icon: ShoppingBagIcon, ready: true },
-  { href: "/admin/catalogo", label: "Catálogo", permission: "manage_catalog", icon: PackageIcon, ready: false },
+  { href: "/admin/catalogo", label: "Catálogo", permission: "manage_catalog", icon: PackageIcon, ready: true },
   { href: "/admin/usuarios", label: "Usuarios", permission: "manage_users", icon: UsersIcon, ready: true },
   { href: "/admin/configuracion", label: "Configuración", permission: "manage_settings", icon: SettingsIcon, ready: false },
 ];

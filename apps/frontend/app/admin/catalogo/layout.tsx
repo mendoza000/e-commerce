@@ -10,9 +10,7 @@ import { cn } from "@/lib/utils";
 /** First nested admin sub-nav — Pedidos and Usuarios are flat, single-route sections. */
 const SUB_NAV = [
   { href: "/admin/catalogo/categorias", label: "Categorías", ready: true },
-  // Built in M6 — kept visible now, same not-ready styling admin-shell.tsx
-  // uses for a top-level section that isn't linkable yet.
-  { href: "/admin/catalogo/productos", label: "Productos", ready: false },
+  { href: "/admin/catalogo/productos", label: "Productos", ready: true },
 ];
 
 export default function CatalogLayout({ children }: { children: React.ReactNode }) {

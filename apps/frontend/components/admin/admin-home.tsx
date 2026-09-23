@@ -14,7 +14,6 @@ export function AdminHome() {
   }
 
   const pending = [
-    { label: "Catálogo e inventario", phase: "5c", available: user.permissions.manage_catalog },
     { label: "Configuración de la tienda", phase: "5d", available: user.permissions.manage_settings },
   ].filter((section) => section.available);
 
