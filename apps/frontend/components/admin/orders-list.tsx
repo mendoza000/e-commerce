@@ -107,7 +107,11 @@ export function OrdersList() {
           }
         >
           <SelectTrigger>
-            <SelectValue />
+            <SelectValue>
+              {(value: string | null) =>
+                STATUS_OPTIONS.find((option) => option.value === value)?.label ?? "Todos los estados"
+              }
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {STATUS_OPTIONS.map((option) => (

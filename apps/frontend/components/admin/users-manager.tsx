@@ -247,7 +247,9 @@ export function UsersManager() {
                     >
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue />
+                          <SelectValue>
+                            {(value: string | null) => (value === "owner" ? "Dueño" : "Operador")}
+                          </SelectValue>
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
